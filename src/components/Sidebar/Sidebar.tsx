@@ -50,7 +50,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="chat-item-title">{session.title}</div>
               <div className="chat-item-info">
-                <span className="chat-item-model">{session.model}</span>
                 <span className="chat-item-date">{formatTimestamp(session.updatedAt)}</span>
               </div>
             </div>

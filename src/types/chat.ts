@@ -26,3 +26,18 @@ export interface ChatSession {
 }
 
 export type ModelType = 'gpt-5-nano' | 'gpt-4' | 'claude-3' | 'gemini-pro';
+
+// API 응답 타입
+export interface SessionData {
+  chat_session_id: number;
+  session_title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionsApiResponse {
+  success: boolean;
+  message: string;
+  data: SessionData[];
+  status_code: number;
+}

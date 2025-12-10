@@ -1,5 +1,5 @@
-import { getStreamChatUrl } from '../config/api';
-import { ChatRequest, ChatResponse } from '../types/chat';
+import { getStreamChatUrl, getSessionsUrl } from '../config/api';
+import { ChatRequest, ChatResponse, SessionsApiResponse, ChatSession } from '../types/chat';
 
 export class ChatService {
   private abortController: AbortController | null = null;
@@ -89,6 +89,42 @@ export class ChatService {
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
+    }
+  }
+
+  async fetchSessions(): Promise<ChatSession[]> {
+    try {
+      const url = getSessionsUrl();
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const apiResponse: SessionsApiResponse = await response.json();
+
+      if (!apiResponse.success) {
+        throw new Error(apiResponse.message || '세션 목록을 불러오는데 실패했습니다.');
+      }
+
+      // API 응답을 ChatSession 형식으로 변환
+      return apiResponse.data.map(session => ({
+        id: session.chat_session_id.toString(),
+        title: session.session_title,
+        messages: [],
+        model: 'gpt-5-nano' as const, // 기본 모델
+        createdAt: new Date(session.created_at).getTime(),
+        updatedAt: new Date(session.updated_at).getTime(),
+      }));
+
+    } catch (error) {
+      console.error('Error fetching sessions:', error);
+      throw error;
     }
   }
 }

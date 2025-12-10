@@ -19,8 +19,19 @@ function App() {
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
   useEffect(() => {
-    const loadedSessions = storage.getSessions();
-    setSessions(loadedSessions);
+    const loadSessions = async () => {
+      try {
+        const fetchedSessions = await chatService.fetchSessions();
+        setSessions(fetchedSessions);
+      } catch (error) {
+        console.error('세션 목록 로드 실패:', error);
+        // 오류 발생 시 로컬 스토리지에서 폴백
+        const loadedSessions = storage.getSessions();
+        setSessions(loadedSessions);
+      }
+    };
+
+    loadSessions();
   }, []);
 
   useEffect(() => {
