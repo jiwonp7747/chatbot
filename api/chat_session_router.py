@@ -31,6 +31,3 @@ async def read_messages(
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, messages)
 
 
-
-
-
