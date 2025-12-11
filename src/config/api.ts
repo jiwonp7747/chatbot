@@ -4,7 +4,8 @@ export const API_CONFIG = {
   endpoints: {
     streamChat: '/chat/stream-chat',
     sessions: '/chat/session',
-    messages: '/chat/message'
+    messages: '/chat/message',
+    model: '/chat/model'
   }
 };
 
@@ -19,3 +20,7 @@ export const getSessionsUrl = (): string => {
 export const getMessagesUrl = (sessionId: string): string => {
   return `http://${API_CONFIG.baseUrl}:${API_CONFIG.basePort}${API_CONFIG.endpoints.messages}/${sessionId}`;
 };
+
+export const getAvailAbleModelListUrl = (): string => {
+  return `http://${API_CONFIG.baseUrl}:${API_CONFIG.basePort}${API_CONFIG.endpoints.model}`;
+}

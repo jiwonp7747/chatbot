@@ -149,7 +149,9 @@ function App() {
       setCurrentSessionId(newSession.id);
       targetSessionId = newSession.id;
       storage.saveSession(newSession);
-    } else {
+    }
+
+    else {
       // 기존 세션에 메시지 추가
       setSessions(prev => prev.map(s => {
         if (s.id === targetSessionId) {
