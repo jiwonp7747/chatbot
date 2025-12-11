@@ -43,12 +43,253 @@
   font-size: 15px;
   line-height: 1.6;
   color: var(--text-primary);
-  white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+/* 마크다운 스타일링 */
+.message-text p {
+  margin: 0 0 12px 0;
+}
+
+.message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.message-text h1,
+.message-text h2,
+.message-text h3,
+.message-text h4,
+.message-text h5,
+.message-text h6 {
+  margin: 16px 0 8px 0;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.message-text h1 { font-size: 24px; }
+.message-text h2 { font-size: 20px; }
+.message-text h3 { font-size: 18px; }
+.message-text h4 { font-size: 16px; }
+
+.message-text ul,
+.message-text ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.message-text li {
+  margin: 4px 0;
+}
+
+.message-text code {
+  background-color: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+}
+
+.message-text pre {
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.message-text pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.message-text a {
+  color: #0969da;
+  text-decoration: none;
+}
+
+.message-text a:hover {
+  text-decoration: underline;
+}
+
+.message-text blockquote {
+  border-left: 4px solid var(--border-color);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: var(--text-secondary);
+}
+
+.message-text table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.message-text th,
+.message-text td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.message-text th {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.message-text hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 16px 0;
+}
+
+.message-text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
 }
 
 .message-timestamp {
   font-size: 11px;
   color: var(--text-tertiary);
   margin-top: 8px;
+}
+
+/* 코드 블록 커스텀 스타일 */
+.message-text pre code.hljs {
+  background-color: #282c34;
+  color: #abb2bf;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+/* YAML 스타일 - GPT 스타일 */
+.message-text pre code.language-yaml .hljs-attr,
+.message-text pre code.language-yml .hljs-attr {
+  color: #e06c75 !important; /* 붉은색 - key */
+}
+
+.message-text pre code.language-yaml .hljs-string,
+.message-text pre code.language-yml .hljs-string {
+  color: #98c379 !important; /* 초록색 - value */
+}
+
+.message-text pre code.language-yaml .hljs-number,
+.message-text pre code.language-yml .hljs-number {
+  color: #98c379 !important; /* 초록색 - number value */
+}
+
+.message-text pre code.language-yaml .hljs-literal,
+.message-text pre code.language-yml .hljs-literal {
+  color: #98c379 !important; /* 초록색 - boolean value */
+}
+
+/* Text, Bash, Shell - 하얀색 */
+.message-text pre code.language-text,
+.message-text pre code.language-bash,
+.message-text pre code.language-sh,
+.message-text pre code.language-shell,
+.message-text pre code.language-plaintext {
+  color: #e6e6e6 !important;
+}
+
+.message-text pre code.language-text *,
+.message-text pre code.language-bash *,
+.message-text pre code.language-sh *,
+.message-text pre code.language-shell *,
+.message-text pre code.language-plaintext * {
+  color: #e6e6e6 !important;
+}
+
+/* JavaScript/TypeScript - 가독성 향상 */
+.message-text pre code.language-javascript .hljs-keyword,
+.message-text pre code.language-typescript .hljs-keyword,
+.message-text pre code.language-js .hljs-keyword,
+.message-text pre code.language-ts .hljs-keyword {
+  color: #c678dd; /* 보라색 - keyword */
+}
+
+.message-text pre code.language-javascript .hljs-function,
+.message-text pre code.language-typescript .hljs-function,
+.message-text pre code.language-js .hljs-function,
+.message-text pre code.language-ts .hljs-function {
+  color: #61afef; /* 파란색 - function */
+}
+
+.message-text pre code.language-javascript .hljs-string,
+.message-text pre code.language-typescript .hljs-string,
+.message-text pre code.language-js .hljs-string,
+.message-text pre code.language-ts .hljs-string {
+  color: #98c379; /* 초록색 - string */
+}
+
+.message-text pre code.language-javascript .hljs-number,
+.message-text pre code.language-typescript .hljs-number,
+.message-text pre code.language-js .hljs-number,
+.message-text pre code.language-ts .hljs-number {
+  color: #d19a66; /* 주황색 - number */
+}
+
+/* Python - 가독성 향상 */
+.message-text pre code.language-python .hljs-keyword {
+  color: #c678dd; /* 보라색 */
+}
+
+.message-text pre code.language-python .hljs-string {
+  color: #98c379; /* 초록색 */
+}
+
+.message-text pre code.language-python .hljs-number {
+  color: #d19a66; /* 주황색 */
+}
+
+.message-text pre code.language-python .hljs-function {
+  color: #61afef; /* 파란색 */
+}
+
+/* JSON - 가독성 향상 */
+.message-text pre code.language-json .hljs-attr {
+  color: #e06c75; /* 붉은색 - key */
+}
+
+.message-text pre code.language-json .hljs-string {
+  color: #98c379; /* 초록색 - value */
+}
+
+.message-text pre code.language-json .hljs-number,
+.message-text pre code.language-json .hljs-literal {
+  color: #d19a66; /* 주황색 */
+}
+
+/* HTML/CSS */
+.message-text pre code.language-html .hljs-tag,
+.message-text pre code.language-xml .hljs-tag {
+  color: #e06c75; /* 붉은색 */
+}
+
+.message-text pre code.language-html .hljs-name,
+.message-text pre code.language-xml .hljs-name {
+  color: #e06c75; /* 붉은색 */
+}
+
+.message-text pre code.language-html .hljs-attr,
+.message-text pre code.language-xml .hljs-attr {
+  color: #d19a66; /* 주황색 */
+}
+
+.message-text pre code.language-css .hljs-selector-tag,
+.message-text pre code.language-css .hljs-selector-class,
+.message-text pre code.language-css .hljs-selector-id {
+  color: #e06c75; /* 붉은색 */
+}
+
+.message-text pre code.language-css .hljs-attribute {
+  color: #61afef; /* 파란색 */
+}
+
+.message-text pre code.language-css .hljs-string,
+.message-text pre code.language-css .hljs-number {
+  color: #98c379; /* 초록색 */
 }

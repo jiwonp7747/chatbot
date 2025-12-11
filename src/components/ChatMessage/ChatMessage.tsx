@@ -1,5 +1,9 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import './ChatMessage.css';
+import 'highlight.js/styles/atom-one-dark.css';
 import { Message } from '../../types/chat';
 
 interface ChatMessageProps {
@@ -17,7 +21,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           {message.role === 'user' ? 'You' : 'AI'}
         </div>
         <div className="message-text">
-          {message.content}
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+          >
+            {message.content}
+          </ReactMarkdown>
         </div>
         <div className="message-timestamp">
           {new Date(message.timestamp).toLocaleTimeString('ko-KR', {
