@@ -1,5 +1,5 @@
-import { getStreamChatUrl, getSessionsUrl } from '../config/api';
-import { ChatRequest, ChatResponse, SessionsApiResponse, ChatSession } from '../types/chat';
+import { getStreamChatUrl, getSessionsUrl, getMessagesUrl } from '../config/api';
+import { ChatRequest, ChatResponse, SessionsApiResponse, ChatSession, MessagesApiResponse, Message } from '../types/chat';
 
 export class ChatService {
   private abortController: AbortController | null = null;
@@ -23,7 +23,8 @@ export class ChatService {
         },
         body: JSON.stringify({
           prompt: request.prompt,
-          model: request.model
+          model: request.model,
+          chat_session_id: request.chat_session_id ?? null
         }),
         signal: this.abortController.signal
       });
@@ -124,6 +125,42 @@ export class ChatService {
 
     } catch (error) {
       console.error('Error fetching sessions:', error);
+      throw error;
+    }
+  }
+
+  async fetchMessages(sessionId: string): Promise<Message[]> {
+    try {
+      const url = getMessagesUrl(sessionId);
+
+      console.log("request url {}", url)
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const apiResponse: MessagesApiResponse = await response.json();
+
+      if (!apiResponse.success) {
+        throw new Error(apiResponse.message || '메시지를 불러오는데 실패했습니다.');
+      }
+
+      // API 응답을 Message 형식으로 변환
+      return apiResponse.data.map(msg => ({
+        id: msg.chat_message_id.toString(),
+        role: msg.role === 'system' ? 'assistant' : msg.role, // system -> assistant로 변환
+        content: msg.content,
+        timestamp: new Date(msg.created_at).getTime(),
+      }));
+
+    } catch (error) {
+      console.error('Error fetching messages:', error);
       throw error;
     }
   }

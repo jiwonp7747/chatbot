@@ -3,14 +3,18 @@ import './ChatInput.css';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onStop?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  isStreaming?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
+  onStop,
   disabled = false,
-  placeholder = '메시지를 입력하세요...'
+  placeholder = '메시지를 입력하세요...',
+  isStreaming = false
 }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -24,7 +28,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !disabled) {
+    if (isStreaming) {
+      // 스트리밍 중일 때는 중지
+      onStop?.();
+    } else if (message.trim() && !disabled) {
+      // 일반 메시지 전송
       onSend(message.trim());
       setMessage('');
       if (textareaRef.current) {
@@ -34,7 +42,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isStreaming) {
       e.preventDefault();
       handleSubmit(e);
     }
@@ -56,21 +64,35 @@ const ChatInput: React.FC<ChatInputProps> = ({
         <button
           type="submit"
           className="chat-input-send"
-          disabled={!message.trim() || disabled}
+          disabled={!isStreaming && (!message.trim() || disabled)}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
+          {isStreaming ? (
+            // 중지 아이콘 (정사각형)
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              stroke="none"
+            >
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          ) : (
+            // 보내기 아이콘 (종이비행기)
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          )}
         </button>
       </div>
       <div className="chat-input-hint">

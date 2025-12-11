@@ -12,11 +12,13 @@ function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelType>('gpt-5-nano');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
+  const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
+  const [streamingContentMap, setStreamingContentMap] = useState<Map<string, string>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
+  const isCurrentSessionStreaming = streamingSessionId !== null && streamingSessionId === currentSessionId;
+  const streamingContent = currentSessionId ? (streamingContentMap.get(currentSessionId) || '') : '';
 
   useEffect(() => {
     const loadSessions = async () => {
@@ -56,25 +58,80 @@ function App() {
 
   const handleNewChat = () => {
     setCurrentSessionId(null);
-    setStreamingContent('');
   };
 
-  const handleSessionSelect = (sessionId: string) => {
-    const loadedSessions = storage.getSessions();
-    setSessions(loadedSessions);
-    setCurrentSessionId(sessionId);
-    setStreamingContent('');
+  const handleSessionSelect = async (sessionId: string) => {
+    try {
+      setCurrentSessionId(sessionId);
+
+      // API에서 메시지 로드
+      const messages = await chatService.fetchMessages(sessionId);
+      console.log("📨 로드된 메시지:", messages)
+
+      // 세션의 메시지 업데이트
+      setSessions(prevSessions => prevSessions.map(session => {
+        if (session.id === sessionId) {
+          return {
+            ...session,
+            messages: messages
+          };
+        }
+        return session;
+      }));
+
+      console.log("select action current session: {}", sessionId)
+
+    } catch (error) {
+      console.error('메시지 로드 실패:', error);
+      // 오류 발생 시 로컬 스토리지에서 폴백
+      const loadedSessions = storage.getSessions();
+      setSessions(loadedSessions);
+      setCurrentSessionId(sessionId);
+    }
+  };
+
+  const handleStopStreaming = () => {
+    if (!streamingSessionId) return;
+
+    // SSE 연결 종료
+    chatService.closeConnection();
+
+    // 현재까지 받은 메시지를 저장
+    const partialContent = streamingContentMap.get(streamingSessionId) || '';
+
+    if (partialContent) {
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: partialContent,
+        timestamp: Date.now()
+      };
+
+      setSessions(prevSessions => prevSessions.map(s => {
+        if (s.id === streamingSessionId) {
+          const updated = {
+            ...s,
+            messages: [...s.messages, assistantMessage],
+            updatedAt: Date.now()
+          };
+          storage.saveSession(updated);
+          return updated;
+        }
+        return s;
+      }));
+    }
+
+    // 스트리밍 상태 정리
+    setStreamingContentMap(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(streamingSessionId);
+      return newMap;
+    });
+    setStreamingSessionId(null);
   };
 
   const handleSendMessage = async (content: string) => {
     let targetSessionId = currentSessionId;
-
-    if (!targetSessionId) {
-      const newSession = createNewSession(content);
-      setSessions(prev => [newSession, ...prev]);
-      setCurrentSessionId(newSession.id);
-      targetSessionId = newSession.id;
-    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -83,32 +140,64 @@ function App() {
       timestamp: Date.now()
     };
 
-    setSessions(prev => prev.map(s => {
-      if (s.id === targetSessionId) {
-        const updated = {
-          ...s,
-          messages: [...s.messages, userMessage],
-          updatedAt: Date.now()
-        };
-        storage.saveSession(updated);
-        return updated;
-      }
-      return s;
-    }));
+    if (!targetSessionId) {
+      // 새 세션 생성 + 사용자 메시지 추가를 한 번에 처리
+      const newSession = createNewSession(content);
+      newSession.messages = [userMessage];
 
-    setIsStreaming(true);
-    setStreamingContent('');
+      setSessions(prev => [newSession, ...prev]);
+      setCurrentSessionId(newSession.id);
+      targetSessionId = newSession.id;
+      storage.saveSession(newSession);
+    } else {
+      // 기존 세션에 메시지 추가
+      setSessions(prev => prev.map(s => {
+        if (s.id === targetSessionId) {
+          const updated = {
+            ...s,
+            messages: [...s.messages, userMessage],
+            updatedAt: Date.now()
+          };
+          storage.saveSession(updated);
+          return updated;
+        }
+        return s;
+      }));
+    }
 
+    // 스트리밍 시작: 세션 ID 설정 및 초기화
+    setStreamingSessionId(targetSessionId);
+    setStreamingContentMap(prev => {
+      const newMap = new Map(prev);
+      newMap.set(targetSessionId!, '');
+      return newMap;
+    });
+
+    // TODO model type api 에서 가져오기
     const modelToUse = sessions.find(s => s.id === targetSessionId)?.model || selectedModel;
 
     chatService.streamChat(
-      { prompt: content, model: modelToUse }, // request
+      {
+        prompt: content,
+        model: modelToUse,
+        chat_session_id: targetSessionId ? parseInt(targetSessionId) : null
+      },
       (response: ChatResponse) => { // onMessage
         if (response.status === 'streaming') {
-          setStreamingContent(prev => prev + response.content);
+          // 스트리밍 중: 세션별 콘텐츠 누적
+          setStreamingContentMap(prev => {
+            const newMap = new Map(prev);
+            const currentContent = newMap.get(targetSessionId!) || '';
+            newMap.set(targetSessionId!, currentContent + response.content);
+            return newMap;
+          });
         } else if (response.status === 'done') {
-          setStreamingContent(prev => {
-            const fullContent = prev + response.content;
+          // 완료: 최종 메시지 저장 및 스트리밍 상태 정리
+          setStreamingContentMap(prev => {
+            const newMap = new Map(prev);
+            const currentContent = newMap.get(targetSessionId!) || '';
+            const fullContent = currentContent + response.content;
+
             const assistantMessage: Message = {
               id: (Date.now() + 1).toString(),
               role: 'assistant',
@@ -128,11 +217,15 @@ function App() {
               }
               return s;
             }));
-            return '';
+
+            // 스트리밍 완료: 맵에서 제거
+            newMap.delete(targetSessionId!);
+            return newMap;
           });
-          setIsStreaming(false);
+          setStreamingSessionId(null);
 
         } else if (response.status === 'error') {
+          // 에러: 에러 메시지 저장 및 스트리밍 상태 정리
           const errorMessage: Message = {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
@@ -152,11 +245,16 @@ function App() {
             }
             return s;
           }));
-          setStreamingContent('');
-          setIsStreaming(false);
+
+          setStreamingContentMap(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(targetSessionId!);
+            return newMap;
+          });
+          setStreamingSessionId(null);
         }
       },
-      (error: Error) => {// on Error
+      (error: Error) => { // onError
         console.error('Chat error:', error);
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -177,10 +275,16 @@ function App() {
           }
           return s;
         }));
-        setStreamingContent('');
+
+        setStreamingContentMap(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(targetSessionId!);
+          return newMap;
+        });
+        setStreamingSessionId(null);
       },
       () => { // onComplete
-        setIsStreaming(false);
+        setStreamingSessionId(null);
       }
     );
   };
@@ -204,7 +308,7 @@ function App() {
                 key={currentSession.id}
                 session={currentSession}
                 streamingContent={streamingContent}
-                isStreaming={isStreaming}
+                isStreaming={isCurrentSessionStreaming}
                 onModelChange={(model) => {
                   const updated = { ...currentSession, model };
                   storage.saveSession(updated);
@@ -214,8 +318,10 @@ function App() {
             />)}
         <ChatInput
           onSend={handleSendMessage}
-          disabled={isStreaming}
-          placeholder={isStreaming ? '응답을 기다리는 중...' : '메시지를 입력하세요...'}
+          onStop={handleStopStreaming}
+          isStreaming={isCurrentSessionStreaming}
+          disabled={false}
+          placeholder={isCurrentSessionStreaming ? '응답을 기다리는 중...' : '메시지를 입력하세요...'}
         />
       </div>
     </div>

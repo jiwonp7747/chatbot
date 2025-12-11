@@ -3,7 +3,8 @@ export const API_CONFIG = {
   basePort: process.env.REACT_APP_BASE_PORT || '8000',
   endpoints: {
     streamChat: '/chat/stream-chat',
-    sessions: '/chat/session'
+    sessions: '/chat/session',
+    messages: '/chat/message'
   }
 };
 
@@ -13,4 +14,8 @@ export const getStreamChatUrl = (): string => {
 
 export const getSessionsUrl = (): string => {
   return `http://${API_CONFIG.baseUrl}:${API_CONFIG.basePort}${API_CONFIG.endpoints.sessions}`;
+};
+
+export const getMessagesUrl = (sessionId: string): string => {
+  return `http://${API_CONFIG.baseUrl}:${API_CONFIG.basePort}${API_CONFIG.endpoints.messages}/${sessionId}`;
 };

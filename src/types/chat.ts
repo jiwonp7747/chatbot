@@ -1,6 +1,7 @@
 export interface ChatRequest {
   prompt: string;
   model: string;
+  chat_session_id?: number | null;
 }
 
 export interface ChatResponse {
@@ -39,5 +40,20 @@ export interface SessionsApiResponse {
   success: boolean;
   message: string;
   data: SessionData[];
+  status_code: number;
+}
+
+export interface MessageData {
+  chat_message_id: number;
+  content: string;
+  created_at: string;
+  role: 'user' | 'system';
+  chat_session_id: number;
+}
+
+export interface MessagesApiResponse {
+  success: boolean;
+  message: string;
+  data: MessageData[];
   status_code: number;
 }
