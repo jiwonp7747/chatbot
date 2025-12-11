@@ -8,6 +8,7 @@ class StreamStatus(str, Enum):
     ERROR = "error"
 
 class ChatRequest(BaseModel):
+    chat_session_id: Optional[int]
     prompt: str
     model: Optional[str] = "gpt-5.1-mini"
 
