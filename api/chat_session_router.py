@@ -38,6 +38,3 @@ async def available_model_list(
 ):
     model_types = await chat_service.get_available_model_list(db)
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, model_types)
-
-
-

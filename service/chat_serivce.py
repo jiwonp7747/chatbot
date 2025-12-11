@@ -9,6 +9,7 @@ from starlette.requests import Request
 from client.openai_client import aclient
 from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
+from core.config.prompt.prompt import SYSTEM_PROMPT
 from db.chat_models import ChatSession, ChatMessage, ModelType
 from db.database import get_db
 from schema import ChatRequest, ChatResponse, StreamStatus
@@ -166,7 +167,7 @@ async def process_chat_request(
     try:
         messages = []
         messages.append(
-            {"role": "system", "content": "당신은 도움이 되는 AI 어시스턴트입니다."}
+            {"role": "system", "content": SYSTEM_PROMPT}
         )
         for chat_message in message_history:
             message = {

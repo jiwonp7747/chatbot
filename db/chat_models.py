@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, BigInteger
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, BigInteger, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -38,3 +38,14 @@ class ModelType(Base):
     model_name = Column(String, nullable=True)
     model_type = Column(String, nullable=True)
     summary = Column(String, nullable=True)
+
+class PromptTemplate(Base):
+    __tablename__ = "prompt_template"
+
+    prompt_id = Column(BigInteger, primary_key=True, index=True)
+    prompt_name = Column(String, nullable=True)
+    prompt_type = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=True)
+    priority = Column(Integer, nullable=True)
+    content = Column(String, nullable=True)
+
