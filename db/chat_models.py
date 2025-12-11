@@ -30,3 +30,11 @@ class ChatMessage(Base):
 
     # 관계 설정
     session = relationship("ChatSession", back_populates="messages")
+
+class ModelType(Base):
+    __tablename__ = "model_type"
+
+    model_id = Column(BigInteger, primary_key=True, index=True)
+    model_name = Column(String, nullable=True)
+    model_type = Column(String, nullable=True)
+    summary = Column(String, nullable=True)

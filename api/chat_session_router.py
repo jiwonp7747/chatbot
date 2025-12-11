@@ -30,4 +30,14 @@ async def read_messages(
     messages = await chat_service.get_chat_messages(chat_session_id, db)
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, messages)
 
+@router.get(
+    "/model"
+)
+async def available_model_list(
+        db: AsyncSession = Depends(get_db),
+):
+    model_types = await chat_service.get_available_model_list(db)
+    return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, model_types)
+
+
 

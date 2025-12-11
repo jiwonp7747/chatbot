@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from tkinter.tix import Select
 from typing import AsyncGenerator, Optional
 
 from pydantic import BaseModel
@@ -8,7 +9,7 @@ from starlette.requests import Request
 from client.openai_client import aclient
 from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
-from db.chat_models import ChatSession, ChatMessage
+from db.chat_models import ChatSession, ChatMessage, ModelType
 from db.database import get_db
 from schema import ChatRequest, ChatResponse, StreamStatus
 from sse.sse_util import SSEFormatter
@@ -272,3 +273,10 @@ async def create_chat_title(
 
     except Exception as e:
         print(f"❌ 제목 생성 실패: {e}")
+
+async def get_available_model_list(
+        db: AsyncSession,
+):
+    model_query = select(ModelType)
+    result = await db.execute(model_query)
+    return result.scalars().all()
