@@ -5,10 +5,11 @@ from sqlalchemy import text
 
 from core.config import middleware_config
 from core.config.prompt.prompt import load_system_prompts
+from core.config.swagger.swagger_config import setup_swagger
 from middleware.logging import LoggingMiddleware
 from middleware.stream_tracker import StreamTrackerMiddleware
 from sse.chat_router import router as sse_router
-from api.chat_session_router import router as chat_session_router
+from api import router as api_router
 from common.exceptionhandler import register_exception_handler
 from core.config.logger import setup_logging
 from db.database import AsyncSessionLocal, engine  # DB 엔진 및 세션
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
 setup_logging()
 
 app = FastAPI(lifespan=lifespan)
+app = setup_swagger(app, title="chat-server", version="0.0.1", description="chat-server")
 
 # middleware
 middleware_config.set_cors_config(app)
@@ -47,10 +49,6 @@ app.add_middleware(LoggingMiddleware)  # 로깅
 
 # router
 app.include_router(sse_router)
-app.include_router(chat_session_router)
+app.include_router(api_router)
 
 register_exception_handler(app)
-
-# --- [Run] 실행 ---
-if __name__ == '__main__':
-    uvicorn.run("main:app", host='0.0.0.0', port=8000, reload=True)
