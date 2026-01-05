@@ -56,8 +56,17 @@ async def call_tools_node(
                         tool_name = tool_call.get("name")
                         tool_arguments = tool_call.get("arguments", {})
 
+                        # ✅ token 자동 주입 (AI가 빼먹은 경우 대비)
+                        if 'token' not in tool_arguments:
+                            token = state.get('token')
+                            if token:
+                                tool_arguments['token'] = token
+                                logger.info(f"🔑 Token 자동 주입됨: {tool_name}")
+                        else:
+                            logger.info(f"✓ Token 이미 존재: {tool_name}")
+
                         try:
-                            logger.info(f"🔨 도구 호출: {tool_name}")
+                            logger.info(f"🔨 도구 호출: {tool_name} (arguments: {list(tool_arguments.keys())})")
 
                             # 도구 실행
                             result = await session.call_tool(

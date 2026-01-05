@@ -172,16 +172,21 @@ class ChatLangGraph:
                 kind = event["event"]
                 node_name = event.get("metadata", {}).get("langgraph_node", "")
 
+                # 🔍 디버깅: 모든 이벤트 로깅
+                # logger.info(f"🔍 Event: {kind}, Node: {node_name}, Metadata: {event.get('metadata', {})}")
+
                 # 노드 시작 이벤트 - 진행 상황 메시지 전송
                 if kind == "on_chain_start" and node_name in node_messages:
                     progress_message = node_messages[node_name]
-                    logger.info(f"📍 {node_name}: {progress_message}")
+                    logger.info(f"📍 메시지 전송: {node_name}: {progress_message}")
 
                     progress_response = ChatResponse(
                         content=progress_message,
                         status=StreamStatus.PROGRESS
                     )
-                    yield (SSEFormatter.format(progress_response), None)
+                    sse_message = SSEFormatter.format(progress_response)
+                    logger.info(f"📡 SSE 메시지: {sse_message[:100]}...")
+                    yield (sse_message, None)
 
                 # 노드 완료 이벤트 - state 업데이트
                 elif kind == "on_chain_end" and node_name:
@@ -189,7 +194,7 @@ class ChatLangGraph:
                     if output:
                         # state 업데이트
                         final_state = output if isinstance(output, dict) else final_state
-                        logger.debug(f"✅ {node_name} 완료")
+                        logger.info(f"✅ {node_name} 완료 - state 업데이트됨")
 
             # 최종 state 반환
             if final_state is None:
@@ -304,10 +309,13 @@ async def process_chat_with_langgraph(
         async for progress_message, state in chat_graph.run_until_stream(initial_state):
             # 중간 진행 메시지 전송
             if progress_message:
+                logger.info(f"🚀 클라이언트로 진행 메시지 전송 중... (길이: {len(progress_message)})")
                 yield progress_message
+                logger.info(f"✅ 진행 메시지 전송 완료")
 
             # 최종 state 저장
             if state:
+                logger.info(f"📦 최종 state 수신 완료")
                 final_state = state
 
         # 4. 에러 체크

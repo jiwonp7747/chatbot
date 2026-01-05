@@ -18,6 +18,18 @@ logger = logging.getLogger("chat-server")
 MCP_SERVER_SSE_URL = os.getenv("MCP_SERVER_SSE_URL", "http://localhost:3000/sse")
 
 
+def get_tool_description(tool):
+    # 1. 최상위 description 확인
+    if tool.description:
+        return tool.description
+
+    # 2. annotations 내부에 description이 있는지 확인 (현재 상황)
+    if hasattr(tool, 'annotations') and tool.annotations and tool.annotations.description:
+        return tool.annotations.description
+
+    # 3. 둘 다 없으면 기본값
+    return "설명이 없는 도구입니다."
+
 async def load_available_tools_node(
     state: ChatGraphState
 ) -> Dict[str, Any]:
@@ -46,14 +58,18 @@ async def load_available_tools_node(
                 # 도구 정보를 딕셔너리 형태로 변환
                 available_tools = []
                 for tool in tools_list.tools:
+                    # 디버깅: tool 객체 구조 확인
+                    logger.info(f"🔍 Tool 객체: {tool}")
+                    logger.info(f"🔍 Tool 속성: {dir(tool)}")
+
                     tool_info = {
                         "name": tool.name,
-                        "description": tool.description,
+                        "description": get_tool_description(tool),
                         "inputSchema": tool.inputSchema if hasattr(tool, 'inputSchema') else {}
                     }
                     available_tools.append(tool_info)
 
-                logger.info(f"📋 사용 가능한 도구: {len(available_tools)}개")
+                logger.info(f"📋 사용 가능한 도구 리스트: {available_tools}")
                 for tool in available_tools:
                     logger.info(f"  - {tool['name']}: {tool['description']}")
 

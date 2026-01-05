@@ -74,9 +74,81 @@ def _build_tool_analysis_prompt(token:str, available_tools: list) -> str:
             if 'properties' in schema:
                 tools_description += f"  파라미터: {', '.join(schema['properties'].keys())}\n"
 
-    tools_description += "\n**중요**: 위 목록에 있는 도구만 사용할 수 있습니다. 목록에 없는 도구는 사용하지 마세요.\n"
+    tools_description += ("\n**중요**: 위 목록에 있는 도구만 사용할 수 있습니다. 목록에 없는 도구는 사용하지 마세요."
+                          "\n 목록에 없는 도구는 절대 호출하지 않되 만약 호출하게 되는 경우 reason에다가 목록에 없는 도구 호출이라는 메시지를 넣으세요")
 
     return tool_analysis_prompt + tools_description
+
+
+def _build_response_schema(available_tools: list) -> dict:
+    """
+    사용 가능한 도구를 기반으로 JSON Schema 생성 (Structured Outputs용)
+
+    ✅ 핵심: 도구 이름을 enum으로 제한하여 AI가 목록에 없는 도구를 선택할 수 없게 함
+
+    Args:
+        available_tools: 사용 가능한 도구 목록
+
+    Returns:
+        OpenAI response_format용 JSON Schema
+    """
+    # 도구 이름 목록 추출
+    tool_names = [tool['name'] for tool in available_tools] if available_tools else []
+
+    # 도구가 없을 경우 enum 없이 처리
+    if not tool_names:
+        tool_name_schema = {"type": "string", "description": "사용할 도구 이름"}
+    else:
+        tool_name_schema = {
+            "type": "string",
+            "enum": tool_names,  # ✅ 이게 핵심! 목록에 없는 이름은 생성 불가
+            "description": "사용할 도구 이름 (반드시 목록에 있는 것만)"
+        }
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "intent_analysis",
+            "strict": False,  # ✅ strict 모드 비활성화 (arguments의 유연성 위해)
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "intent": {
+                        "type": "string",
+                        "description": "의도 분류"
+                    },
+                    "confidence": {
+                        "type": "number",
+                        "description": "신뢰도 (0.0-1.0)"
+                    },
+                    "requires_context": {
+                        "type": "boolean",
+                        "description": "컨텍스트 필요 여부"
+                    },
+                    "tools": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": tool_name_schema,  # ✅ enum 제약은 여전히 유효!
+                                "arguments": {
+                                    "type": "object",
+                                    "description": "도구 호출에 필요한 인자"
+                                },
+                                "reason": {
+                                    "type": "string",
+                                    "description": "도구가 필요한 이유"
+                                }
+                            },
+                            "required": ["name", "arguments", "reason"]
+                        },
+                        "description": "필요한 도구 목록"
+                    }
+                },
+                "required": ["intent", "confidence", "requires_context", "tools"]
+            }
+        }
+    }
 
 
 async def analyze_intent_node(
@@ -97,25 +169,30 @@ async def analyze_intent_node(
     token = state.get("token")
 
     logger.info(f"🎯 의도 분석 시작: {user_prompt[:50]}...")
-    logger.info(f"📋 사용 가능한 도구: {len(available_tools)}개")
 
     try:
         # 도구 목록을 포함한 프롬프트 생성
         tool_analysis_prompt = _build_tool_analysis_prompt(token, available_tools)
 
-        # OpenAI API를 통한 의도 분석
+        logger.info(f"도구 분석 프롬프트: {tool_analysis_prompt}")
+
+        # ✅ JSON Schema 생성 (도구 이름을 enum으로 제한)
+        response_schema = _build_response_schema(available_tools)
+        logger.info(f"📐 Response Schema: {response_schema}")
+
+        # OpenAI API를 통한 의도 분석 (Structured Outputs 사용)
         response = await aclient.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": tool_analysis_prompt},
                 {"role": "user", "content": user_prompt}
-            ]
+            ],
+            response_format=response_schema  # ✅ 핵심: 스키마 강제 적용
         )
 
         logger.info(f"📄 response 원본: {response}")
 
         analysis_text = response.choices[0].message.content
-        logger.info(f"📄 분석 결과 원본: {analysis_text}")
 
         # JSON 파싱
         analysis = json.loads(analysis_text)
