@@ -16,8 +16,8 @@ class StreamTrackerMiddleware(BaseHTTPMiddleware):
     """스트리밍 요청 추적 및 cleanup 보장 미들웨어"""
 
     async def dispatch(self, request: Request, call_next):
-        # 스트리밍 요청에만 적용
-        if request.url.path == "/chat/stream-chat":
+        # 스트리밍 요청에만 적용 (기존 + LangGraph 엔드포인트)
+        if request.url.path in ["/chat/stream-chat", "/chat/stream-chat-graph"]:
             stream_id = str(uuid.uuid4())
             request.state.stream_id = stream_id
 

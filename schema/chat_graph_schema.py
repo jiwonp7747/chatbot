@@ -2,10 +2,11 @@ from typing import TypedDict, Optional, List, Dict, Any
 from datetime import datetime
 
 
-class ChatGraphState(TypedDict):
+class ChatGraphState(TypedDict, total=False):
     """LangGraph State 정의
 
     각 노드에서 공유하는 상태 정보
+    total=False: 모든 필드가 optional임을 명시
     """
     # 입력 데이터
     chat_session_id: Optional[int]
@@ -17,6 +18,13 @@ class ChatGraphState(TypedDict):
 
     # 의도 분석 결과
     intent_analysis: Optional[Dict[str, Any]]  # {"intent": "question", "confidence": 0.9, ...}
+
+    # MCP 도구 호출 관련
+    available_tools: List[Dict[str, Any]]  # MCP 서버에서 사용 가능한 도구 목록
+    tools_to_call: List[Dict[str, Any]]  # [{"name": "tool_name", "arguments": {...}}, ...]
+    tool_results: List[Dict[str, Any]]  # [{"tool": "tool_name", "result": {...}}, ...]
+    needs_more_tools: bool  # 추가 도구 호출 필요 여부
+    iteration_count: int  # 반복 횟수 (무한 루프 방지)
 
     # OpenAI 메시지 구성
     messages: List[Dict[str, str]]
@@ -30,3 +38,6 @@ class ChatGraphState(TypedDict):
 
     # 에러 처리
     error: Optional[str]
+
+    # 인증 데이터
+    token: str

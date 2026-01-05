@@ -132,6 +132,8 @@ async def process_chat_request(
             async for new_db in get_db():
                 try:
                     await save_chat_to_db(request, collected_content, user_time, new_db)
+                except ApiException as api_exception:
+                    logger.error(f"❌ Callback DB 저장 실패: {api_exception}")
                 except Exception as e:
                     logger.error(f"❌ Callback DB 저장 실패: {stream_id}, {e}")
                 finally:
