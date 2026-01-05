@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/chat-interface.iml" filepath="$PROJECT_DIR$/chat-interface.iml" />
+      <module fileurl="file://$PROJECT_DIR$/seah-agent.iml" filepath="$PROJECT_DIR$/seah-agent.iml" />
     </modules>
   </component>
 </project>
