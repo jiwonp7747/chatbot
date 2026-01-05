@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: Secret
+
+metadata:
+  name: chat-db-secret
+  namespace: chat
+
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "password"
+
+---
+
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: chat-db-svc
+  namespace: chat
+  labels:
+    app: chat-db
+
+spec:
+  ports:
+  - port: 5443
+    name: chat-db-port
+  clusterIP: None
+  selector:
+    app: chat-db
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: chat-db
+    statefulset.kubernetes.io/pod-name: chat-db-sts-0
+  name: chat-db-external
+  namespace: chat
+spec:
+  ports:
+  - port: 5432
+    protocol: TCP
+    targetPort: 5432
+  selector:
+    statefulset.kubernetes.io/pod-name: chat-db-sts-0
+  type: NodePort
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+
+metadata:
+  name: chat-db-sts
+  namespace: chat
+
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: chat-db-pvc
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: "hostpath"
+        resources:
+          requests:
+            storage: 5Gi
+
+  serviceName: "chat-db-svc"
+  selector:
+    matchLabels:
+      app: chat-db
+
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: chat-db
+    spec:
+      containers:
+      - image: postgres:17
+        name: postgres
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: chat-db-secret
+                key: POSTGRES_PASSWORD
+
+        volumeMounts:
+          - name: chat-db-pvc
+            mountPath: /var/lib/postgresql/data
+
+        livenessProbe:
+          exec:
+            command:
+              - "pg_isready"
+              - "-U"
+              - "postgres"
+          initialDelaySeconds: 300
+          periodSeconds: 60
+          timeoutSeconds: 60
+
+        readinessProbe:
+          exec:
+            command:
+              - "pg_isready"
+              - "-U"
+              - "postgres"
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+
