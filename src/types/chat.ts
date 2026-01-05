@@ -6,7 +6,7 @@ export interface ChatRequest {
 
 export interface ChatResponse {
   content: string;
-  status: 'streaming' | 'done' | 'error';
+  status: 'progress' | 'streaming' | 'done' | 'error';
   error: string | null;
 }
 

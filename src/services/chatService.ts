@@ -1,5 +1,6 @@
 import { getStreamChatUrl, getSessionsUrl, getMessagesUrl } from '../config/api';
 import { ChatRequest, ChatResponse, SessionsApiResponse, ChatSession, MessagesApiResponse, Message } from '../types/chat';
+import Cookies from "js-cookie";
 
 export class ChatService {
   private abortController: AbortController | null = null;
@@ -14,12 +15,14 @@ export class ChatService {
       this.closeConnection();
 
       const url = getStreamChatUrl();
+      const token = Cookies.get('LOGIN_TOKEN');
       this.abortController = new AbortController();
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           prompt: request.prompt,
@@ -57,12 +60,23 @@ export class ChatService {
               const jsonStr = line.slice(6).trim();
               if (jsonStr) {
                 const data: ChatResponse = JSON.parse(jsonStr);
+
+                // 모든 상태에 대해 onMessage 호출
                 onMessage(data);
 
-                if (data.status === 'done') {
+                // 상태별 처리
+                if (data.status === 'progress') {
+                  // 진행 상황: 계속 데이터 수신
+                  continue;
+                } else if (data.status === 'streaming') {
+                  // 스트리밍 중: 계속 데이터 수신
+                  continue;
+                } else if (data.status === 'done') {
+                  // 완료: 연결 종료
                   this.closeConnection();
                   return;
                 } else if (data.status === 'error') {
+                  // 에러: 연결 종료 및 완료 처리
                   this.closeConnection();
                   onComplete();
                   return;
@@ -96,10 +110,12 @@ export class ChatService {
   async fetchSessions(): Promise<ChatSession[]> {
     try {
       const url = getSessionsUrl();
+      const token = Cookies.get('LOGIN_TOKEN');
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
       });
 
@@ -132,12 +148,13 @@ export class ChatService {
   async fetchMessages(sessionId: string): Promise<Message[]> {
     try {
       const url = getMessagesUrl(sessionId);
-
+      const token = Cookies.get('LOGIN_TOKEN');
       console.log("request url {}", url)
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
       });
 

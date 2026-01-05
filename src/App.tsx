@@ -14,6 +14,8 @@ function App() {
   const [selectedModel, setSelectedModel] = useState<ModelType>('gpt-5-nano');
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamingContentMap, setStreamingContentMap] = useState<Map<string, string>>(new Map());
+  const [streamingStatusMap, setStreamingStatusMap] = useState<Map<string, 'progress' | 'streaming'>>(new Map());
+  const streamingStatusRef = useRef<Map<string, 'progress' | 'streaming'>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
@@ -127,6 +129,11 @@ function App() {
       newMap.delete(streamingSessionId);
       return newMap;
     });
+    setStreamingStatusMap(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(streamingSessionId);
+      return newMap;
+    });
     setStreamingSessionId(null);
   };
 
@@ -185,12 +192,43 @@ function App() {
         chat_session_id: targetSessionId ? parseInt(targetSessionId) : null
       },
       (response: ChatResponse) => { // onMessage
-        if (response.status === 'streaming') {
-          // 스트리밍 중: 세션별 콘텐츠 누적
+        if (response.status === 'progress') {
+          // 진행 상황: 상태 메시지 교체
+          streamingStatusRef.current.set(targetSessionId!, 'progress');
+          setStreamingStatusMap(prev => {
+            const newMap = new Map(prev);
+            newMap.set(targetSessionId!, 'progress');
+            return newMap;
+          });
           setStreamingContentMap(prev => {
             const newMap = new Map(prev);
-            const currentContent = newMap.get(targetSessionId!) || '';
-            newMap.set(targetSessionId!, currentContent + response.content);
+            newMap.set(targetSessionId!, response.content); // 교체
+            return newMap;
+          });
+        } else if (response.status === 'streaming') {
+          // 스트리밍 중: 세션별 콘텐츠 누적
+          // progress에서 streaming으로 전환 여부 확인 (ref 사용)
+          const previousStatus = streamingStatusRef.current.get(targetSessionId!);
+          const isTransitionFromProgress = previousStatus === 'progress';
+
+          // 상태 업데이트
+          streamingStatusRef.current.set(targetSessionId!, 'streaming');
+          setStreamingStatusMap(prev => {
+            const newMap = new Map(prev);
+            newMap.set(targetSessionId!, 'streaming');
+            return newMap;
+          });
+
+          setStreamingContentMap(prev => {
+            const newMap = new Map(prev);
+            // progress에서 streaming으로 전환되면 초기화
+            if (isTransitionFromProgress) {
+              newMap.set(targetSessionId!, response.content);
+            } else {
+              // streaming 중이면 누적
+              const currentContent = newMap.get(targetSessionId!) || '';
+              newMap.set(targetSessionId!, currentContent + response.content);
+            }
             return newMap;
           });
         } else if (response.status === 'done') {
@@ -224,6 +262,11 @@ function App() {
             newMap.delete(targetSessionId!);
             return newMap;
           });
+          setStreamingStatusMap(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(targetSessionId!);
+            return newMap;
+          });
           setStreamingSessionId(null);
 
         } else if (response.status === 'error') {
@@ -249,6 +292,11 @@ function App() {
           }));
 
           setStreamingContentMap(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(targetSessionId!);
+            return newMap;
+          });
+          setStreamingStatusMap(prev => {
             const newMap = new Map(prev);
             newMap.delete(targetSessionId!);
             return newMap;
@@ -279,6 +327,11 @@ function App() {
         }));
 
         setStreamingContentMap(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(targetSessionId!);
+          return newMap;
+        });
+        setStreamingStatusMap(prev => {
           const newMap = new Map(prev);
           newMap.delete(targetSessionId!);
           return newMap;

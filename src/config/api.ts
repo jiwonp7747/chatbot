@@ -2,7 +2,8 @@ export const API_CONFIG = {
   baseUrl: process.env.REACT_APP_BASE_URL || 'localhost',
   basePort: process.env.REACT_APP_BASE_PORT || '8000',
   endpoints: {
-    streamChat: '/chat/stream-chat',
+    // streamChat: '/chat/stream-chat',
+    streamChat: '/chat/stream-chat-graph',
     sessions: '/chat/session',
     messages: '/chat/message',
     model: '/chat/model'

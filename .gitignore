@@ -25,3 +25,4 @@ yarn-error.log*
 .env
 .env.example
 .idea
+package-lock.json
