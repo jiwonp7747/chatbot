@@ -3,9 +3,10 @@ from typing import Optional
 from enum import Enum
 
 class StreamStatus(str, Enum):
-    STREAMING = "streaming"
-    DONE = "done"
-    ERROR = "error"
+    PROGRESS = "progress"      # 노드별 진행 상황
+    STREAMING = "streaming"     # 실제 AI 응답 chunk
+    DONE = "done"              # 완료
+    ERROR = "error"            # 에러
 
 class ChatRequest(BaseModel):
     chat_session_id: Optional[int]

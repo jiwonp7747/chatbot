@@ -142,27 +142,69 @@ class ChatLangGraph:
     async def run_until_stream(
         self,
         initial_state: ChatGraphState
-    ) -> ChatGraphState:
+    ) -> AsyncGenerator[tuple[Optional[str], Optional[ChatGraphState]], None]:
         """
-        스트리밍 전까지 그래프 실행 (load_available_tools → load_history → analyze_intent → call_tools → generate_response)
+        스트리밍 전까지 그래프 실행하며 각 노드별 진행 상황 스트리밍
+        (load_available_tools → load_history → analyze_intent → call_tools → generate_response)
 
         Args:
             initial_state: 초기 상태
 
-        Returns:
-            스트리밍 준비가 완료된 상태
+        Yields:
+            tuple[Optional[str], Optional[ChatGraphState]]: (SSE 메시지, 최종 state)
+            - 중간 진행: (SSE 메시지, None)
+            - 최종 완료: (None, final_state)
         """
+        # 노드별 메시지 정의
+        node_messages = {
+            "load_available_tools": "🔧 사용 가능한 도구 목록을 불러오고 있습니다...",
+            "load_history": "📚 대화 기록을 불러오고 있습니다...",
+            "analyze_intent": "🔍 질문의 의도를 분석하고 있습니다...",
+            "call_tools": "⚡ 필요한 도구를 실행하여 데이터를 가져오는 중입니다...",
+            "generate_response": "💬 응답을 생성하고 있습니다...",
+        }
+
+        final_state = None
+
         try:
-            # 그래프 실행
-            final_state = await self.graph.ainvoke(initial_state)
-            return final_state
+            # astream_events v2를 사용하여 노드별 이벤트 감지
+            async for event in self.graph.astream_events(initial_state, version="v2"):
+                kind = event["event"]
+                node_name = event.get("metadata", {}).get("langgraph_node", "")
+
+                # 노드 시작 이벤트 - 진행 상황 메시지 전송
+                if kind == "on_chain_start" and node_name in node_messages:
+                    progress_message = node_messages[node_name]
+                    logger.info(f"📍 {node_name}: {progress_message}")
+
+                    progress_response = ChatResponse(
+                        content=progress_message,
+                        status=StreamStatus.PROGRESS
+                    )
+                    yield (SSEFormatter.format(progress_response), None)
+
+                # 노드 완료 이벤트 - state 업데이트
+                elif kind == "on_chain_end" and node_name:
+                    output = event.get("data", {}).get("output", {})
+                    if output:
+                        # state 업데이트
+                        final_state = output if isinstance(output, dict) else final_state
+                        logger.debug(f"✅ {node_name} 완료")
+
+            # 최종 state 반환
+            if final_state is None:
+                logger.warning("⚠️ 최종 state가 None입니다. initial_state 사용")
+                final_state = initial_state
+
+            yield (None, final_state)
 
         except Exception as e:
             logger.error(f"❌ LangGraph 실행 에러: {e}")
-            return {
+            error_state = {
                 **initial_state,
                 "error": str(e)
             }
+            yield (None, error_state)
 
 
 async def process_chat_with_langgraph(
@@ -255,11 +297,29 @@ async def process_chat_with_langgraph(
             "error": None,
         }
 
-        # 3. 그래프 실행 (스트리밍 전까지)
+        # 3. 그래프 실행 (스트리밍 전까지) - 노드별 진행 상황 스트리밍
         logger.info(f"🚀 LangGraph 실행 시작: {stream_id}")
-        final_state = await chat_graph.run_until_stream(initial_state)
+
+        final_state = None
+        async for progress_message, state in chat_graph.run_until_stream(initial_state):
+            # 중간 진행 메시지 전송
+            if progress_message:
+                yield progress_message
+
+            # 최종 state 저장
+            if state:
+                final_state = state
 
         # 4. 에러 체크
+        if not final_state:
+            error_response = ChatResponse(
+                content="",
+                status=StreamStatus.ERROR,
+                error="그래프 실행 중 최종 상태를 받지 못했습니다."
+            )
+            yield SSEFormatter.format(error_response)
+            return
+
         if final_state.get("error"):
             error_response = ChatResponse(
                 content="",
@@ -269,7 +329,7 @@ async def process_chat_with_langgraph(
             yield SSEFormatter.format(error_response)
             return
 
-        # 5. 응답 스트리밍 (노드 4 실행)
+        # 5. 응답 스트리밍 (stream_response_node 실행)
         logger.info(f"📡 응답 스트리밍 시작: {stream_id}")
         async for chunk in stream_response_node(final_state, http_request):
             yield chunk
