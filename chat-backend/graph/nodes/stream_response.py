@@ -9,9 +9,9 @@ from typing import AsyncGenerator
 from starlette.requests import Request
 
 from client.openai_client import aclient
-from schema import ChatResponse, StreamStatus
-from schema.chat_graph_schema import ChatGraphState
-from sse.sse_util import SSEFormatter
+from graph.schema.stream import ChatResponse, StreamStatus
+from graph.schema.graph_state import ChatGraphState
+from router.sse_util import SSEFormatter
 from middleware.stream_tracker import update_stream_content
 
 logger = logging.getLogger("chat-server")

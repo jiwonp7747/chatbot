@@ -11,7 +11,7 @@ import json
 from typing import Dict, Any
 
 from client.openai_client import aclient
-from schema.chat_graph_schema import ChatGraphState
+from graph.schema.graph_state import ChatGraphState
 
 logger = logging.getLogger("chat-server")
 

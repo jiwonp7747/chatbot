@@ -12,7 +12,7 @@ load_dotenv()
 import asyncio
 from sqlalchemy import text
 from db.database import engine, Base, AsyncSessionLocal
-from db.chat_models import ChatSession, ChatMessage, ModelType, PromptTemplate
+from db.models import ChatSession, ChatMessage, ModelType, PromptTemplate
 
 
 async def create_tables():

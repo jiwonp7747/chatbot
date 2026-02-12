@@ -8,8 +8,8 @@ import json
 from typing import Dict, Any
 
 from client.openai_client import aclient
-from core.config.prompt.prompt import SYSTEM_PROMPT
-from schema.chat_graph_schema import ChatGraphState
+from config.prompt import SYSTEM_PROMPT
+from graph.schema.graph_state import ChatGraphState
 
 logger = logging.getLogger("chat-server")
 

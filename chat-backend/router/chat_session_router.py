@@ -6,7 +6,7 @@ from common.response.code import SuccessCode
 from common.response.response_template import ResponseTemplate
 from db.database import get_db
 from schema.chat_session_schema import ChatSessionResponse, ChatMessageCreateRequest
-import service.chat_serivce as chat_service
+import service.chat_service as chat_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 

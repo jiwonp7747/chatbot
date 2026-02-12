@@ -1,7 +1,7 @@
 # global_state.py 또는 main.py 상단
 from sqlalchemy import select, desc
 
-from db.chat_models import PromptTemplate
+from db.models import PromptTemplate
 from db.database import AsyncSessionLocal  # 세션 생성기 import
 
 SYSTEM_PROMPT = "당신은 도움이 되는 AI 어시스턴트입니다."

@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import asc
 
-from db.chat_models import ChatMessage
-from schema.chat_graph_schema import ChatGraphState
+from db.models import ChatMessage
+from graph.schema.graph_state import ChatGraphState
 
 logger = logging.getLogger("chat-server")
 

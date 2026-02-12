@@ -1,2 +1,3 @@
-from .chat_serivce import process_chat_request
-from .mock_ai_serivce import fake_ai_generator
+from .chat_service import process_chat_request
+
+__all__ = ["process_chat_request"]

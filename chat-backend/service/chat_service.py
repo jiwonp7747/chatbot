@@ -8,11 +8,11 @@ from starlette.requests import Request
 from client.openai_client import aclient
 from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
-from core.config.prompt.prompt import SYSTEM_PROMPT
-from db.chat_models import ChatSession, ChatMessage, ModelType
+from config.prompt import SYSTEM_PROMPT
+from db.models import ChatSession, ChatMessage, ModelType
 from db.database import get_db
-from schema import ChatRequest, ChatResponse, StreamStatus
-from sse.sse_util import SSEFormatter
+from graph.schema.stream import ChatRequest, ChatResponse, StreamStatus
+from router.sse_util import SSEFormatter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc, asc

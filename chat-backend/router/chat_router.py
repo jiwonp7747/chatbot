@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from db.database import get_db
-from schema import ChatRequest
-from service import *
+from graph.schema.stream import ChatRequest
+from service import process_chat_request
 from service.chat_langgraph_service import process_chat_with_langgraph
 
 router = APIRouter(prefix="/chat", tags=["chat"])

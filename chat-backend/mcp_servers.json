@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "echart": {
+      "transport": "sse",
+      "url": "http://localhost:3000/sse",
+      "description": "EChart 시각화 도구",
+      "enabled": true
+    }
+  }
+}

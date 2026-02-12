@@ -8,16 +8,15 @@ import logging
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
-from langchain_core.exceptions import ErrorCode
 from starlette.requests import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from langgraph.graph import StateGraph, END
 
 from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
-from schema import ChatRequest, ChatResponse, StreamStatus
-from schema.chat_graph_schema import ChatGraphState
-from sse.sse_util import SSEFormatter
+from graph.schema.stream import ChatRequest, ChatResponse, StreamStatus
+from graph.schema.graph_state import ChatGraphState
+from router.sse_util import SSEFormatter
 from middleware.stream_tracker import (
     register_stream,
     set_user_chat_time,
@@ -25,7 +24,7 @@ from middleware.stream_tracker import (
 )
 from db.database import get_db
 
-from .nodes import (
+from graph.nodes import (
     load_available_tools_node,
     load_chat_history_node,
     analyze_intent_node,
@@ -33,7 +32,7 @@ from .nodes import (
     generate_response_node,
     stream_response_node
 )
-from .chat_serivce import save_chat_to_db  # 기존 DB 저장 로직 재사용
+from .chat_service import save_chat_to_db  # 기존 DB 저장 로직 재사용
 
 logger = logging.getLogger("chat-server")
 
