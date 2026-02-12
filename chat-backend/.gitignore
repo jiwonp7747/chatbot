@@ -1,6 +1,11 @@
 test_main.http
 .idea/
-claude/.claude.md
-.env
 __pycache__/
 **/__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+.env.local
+.env.example
+.omc/

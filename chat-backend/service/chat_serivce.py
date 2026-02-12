@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from tkinter.tix import Select
 from typing import AsyncGenerator, Optional
 
 from pydantic import BaseModel

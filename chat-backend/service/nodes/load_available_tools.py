@@ -82,8 +82,7 @@ async def load_available_tools_node(
         import traceback
         traceback.print_exc()
 
-        # 실패해도 빈 리스트로 계속 진행
+        # 실패해도 빈 리스트로 계속 진행 (MCP는 선택적 기능)
         return {
-            "available_tools": [],
-            "error": f"Failed to load available tools: {str(e)}"
+            "available_tools": []
         }
