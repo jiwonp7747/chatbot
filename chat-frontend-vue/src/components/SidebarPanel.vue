@@ -1,10 +1,13 @@
 <template>
   <div class="sidebar">
     <div class="sidebar-header">
-      <h1 class="sidebar-title">Bistelligence AI</h1>
+      <div class="brand">
+        <div class="brand-icon">Bi</div>
+        <div class="brand-text">Bistelligence</div>
+      </div>
       <button class="new-chat-btn" @click="emit('new-chat')">
-        <span class="new-chat-icon">+</span>
-        새 채팅
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Chat
       </button>
     </div>
 
@@ -55,35 +58,56 @@ function formatTimestamp(timestamp: number): string {
 
 <style scoped>
 .sidebar {
-  width: 280px;
+  width: 300px;
   height: 100vh;
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
+  background: var(--glass-bg);
+  backdrop-filter: blur(40px) saturate(1.5);
+  border-right: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  font-family: var(--font);
 }
 
 .sidebar-header {
   padding: 20px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--glass-border);
 }
 
-.sidebar-title {
-  font-size: 20px;
-  font-weight: 600;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
-  color: var(--text-primary);
+}
+
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--accent), #10b981);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+}
+
+.brand-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-0);
 }
 
 .new-chat-btn {
   width: 100%;
   padding: 12px 16px;
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 14px;
+  background: var(--glass-bg);
+  color: var(--text-1);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
@@ -94,13 +118,8 @@ function formatTimestamp(timestamp: number): string {
 }
 
 .new-chat-btn:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--text-tertiary);
-}
-
-.new-chat-icon {
-  font-size: 18px;
-  font-weight: 300;
+  background: var(--glass-hover);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .chat-list {
@@ -109,39 +128,51 @@ function formatTimestamp(timestamp: number): string {
   padding: 12px;
 }
 
+.chat-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-list::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 2px;
+}
+
 .empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 200px;
-  color: var(--text-tertiary);
-  font-size: 14px;
+  color: var(--text-2);
+  font-size: 13px;
 }
 
 .chat-item {
-  padding: 12px 16px;
+  padding: 12px 14px;
   margin-bottom: 8px;
-  background-color: var(--bg-secondary);
-  border: 1px solid transparent;
-  border-radius: 8px;
+  background: transparent;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .chat-item:hover {
-  background-color: var(--bg-tertiary);
-  border-color: var(--border-color);
+  background: var(--glass-bg);
 }
 
 .chat-item.active {
-  background-color: var(--bg-tertiary);
-  border-color: var(--accent-color);
+  background: var(--accent-soft);
+  border-left-color: rgba(129, 140, 248, 0.15);
+}
+
+.chat-item.active .chat-item-title {
+  color: var(--accent);
 }
 
 .chat-item-title {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-0);
   margin-bottom: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -151,7 +182,7 @@ function formatTimestamp(timestamp: number): string {
 .chat-item-info {
   display: flex;
   align-items: center;
-  font-size: 12px;
-  color: var(--text-tertiary);
+  font-size: 11.5px;
+  color: var(--text-2);
 }
 </style>

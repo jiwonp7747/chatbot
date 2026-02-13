@@ -32,7 +32,8 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--bg-primary);
+  position: relative;
+  z-index: 1;
 }
 
 .welcome-content {
@@ -42,19 +43,22 @@ const emit = defineEmits<{
 }
 
 .welcome-title {
-  font-size: 48px;
+  font-size: 52px;
   font-weight: 700;
-  margin-bottom: 16px;
-  background: linear-gradient(135deg, var(--accent-color), var(--success-color));
+  margin-bottom: 20px;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, var(--text-0) 30%, var(--accent) 70%, var(--emerald));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  line-height: 1.1;
 }
 
 .welcome-subtitle {
-  font-size: 20px;
-  color: var(--text-secondary);
+  font-size: 17px;
+  color: var(--text-2);
   margin-bottom: 40px;
+  font-weight: 400;
 }
 
 .model-selector-wrapper {

@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept B: Neo Seoul - Bistelligence AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --void: #06060a;
+  --surface-1: #0c0c14;
+  --surface-2: #12121e;
+  --surface-3: #1a1a2e;
+  --neon-cyan: #22d3ee;
+  --neon-magenta: #e879f9;
+  --neon-amber: #fbbf24;
+  --text-0: #f0f0f5;
+  --text-1: #9898b0;
+  --text-2: #4a4a6a;
+  --border: rgba(255, 255, 255, 0.06);
+  --font: 'Outfit', sans-serif;
+  --mono: 'Fira Code', monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--void);
+  color: var(--text-0);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Grid overlay */
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Scan line effect */
+.scanline {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* Neon line accents */
+.neon-line-top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--neon-cyan), var(--neon-magenta), transparent);
+  z-index: 10;
+  opacity: 0.7;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+
+.sidebar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(180deg, var(--neon-cyan), transparent 30%, transparent 70%, var(--neon-magenta));
+  opacity: 0.3;
+}
+
+.sidebar-header {
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-logo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  border: 1.5px solid var(--neon-cyan);
+  opacity: 0.6;
+  animation: pulse-border 3s ease-in-out infinite;
+}
+
+.brand-logo::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+  opacity: 0.15;
+}
+
+.brand-logo span {
+  position: relative;
+  z-index: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+}
+
+@keyframes pulse-border {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.brand-name span {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 20px rgba(34, 211, 238, 0.3);
+}
+
+.new-chat-btn {
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 8px;
+  color: var(--neon-cyan);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  letter-spacing: 0.5px;
+}
+
+.new-chat-btn:hover {
+  background: rgba(34, 211, 238, 0.06);
+  border-color: rgba(34, 211, 238, 0.4);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.1), inset 0 0 20px rgba(34, 211, 238, 0.03);
+}
+
+.new-chat-btn .plus {
+  font-size: 16px;
+  font-weight: 300;
+}
+
+.section-label {
+  padding: 16px 20px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-2);
+  font-family: var(--mono);
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px;
+}
+
+.chat-list::-webkit-scrollbar { width: 2px; }
+.chat-list::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 2px; opacity: 0.3; }
+
+.chat-item {
+  padding: 10px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: all 0.2s ease;
+  border-left: 2px solid transparent;
+  position: relative;
+}
+
+.chat-item:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-left-color: var(--text-2);
+}
+
+.chat-item.active {
+  background: rgba(34, 211, 238, 0.04);
+  border-left-color: var(--neon-cyan);
+}
+
+.chat-item.active::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  box-shadow: 0 0 8px var(--neon-cyan);
+}
+
+.chat-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 3px;
+}
+
+.chat-item.active .chat-item-title {
+  color: var(--neon-cyan);
+}
+
+.chat-item-meta {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--mono);
+  letter-spacing: 0.3px;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Topbar */
+.topbar {
+  padding: 14px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(12, 12, 20, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--neon-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--neon-cyan);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 6px var(--neon-cyan); }
+  50% { box-shadow: 0 0 16px var(--neon-cyan); }
+}
+
+.topbar-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-0);
+}
+
+.model-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--neon-amber);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.model-tag:hover {
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+.model-tag::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: var(--neon-amber);
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+}
+
+/* Messages */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 0;
+}
+
+.messages::-webkit-scrollbar { width: 3px; }
+.messages::-webkit-scrollbar-thumb { background: rgba(34, 211, 238, 0.15); border-radius: 3px; }
+
+.message {
+  padding: 20px 40px;
+  display: flex;
+  gap: 16px;
+  max-width: 880px;
+  margin: 0 auto;
+  width: 100%;
+  animation: glitch-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes glitch-in {
+  0% { opacity: 0; transform: translateX(-8px); }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.msg-indicator {
+  width: 2px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.message.user .msg-indicator {
+  background: linear-gradient(180deg, var(--neon-magenta), transparent);
+  box-shadow: 0 0 6px rgba(232, 121, 249, 0.3);
+}
+
+.message.ai .msg-indicator {
+  background: linear-gradient(180deg, var(--neon-cyan), transparent);
+  box-shadow: 0 0 6px rgba(34, 211, 238, 0.3);
+}
+
+.msg-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.msg-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.msg-name {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.message.user .msg-name { color: var(--neon-magenta); }
+.message.ai .msg-name { color: var(--neon-cyan); }
+
+.msg-time {
+  font-size: 10.5px;
+  color: var(--text-2);
+  font-family: var(--mono);
+}
+
+.msg-content {
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--text-1);
+  font-weight: 300;
+}
+
+.msg-content strong {
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+.msg-content p { margin-bottom: 12px; }
+.msg-content p:last-child { margin-bottom: 0; }
+
+.msg-content ul, .msg-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.msg-content li { margin: 5px 0; }
+
+.msg-content li::marker {
+  color: var(--neon-cyan);
+}
+
+.msg-content code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: rgba(34, 211, 238, 0.06);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--neon-cyan);
+  border: 1px solid rgba(34, 211, 238, 0.1);
+}
+
+.msg-content pre {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 14px 0;
+  overflow-x: auto;
+  position: relative;
+}
+
+.msg-content pre::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
+  opacity: 0.4;
+}
+
+.msg-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Streaming cursor */
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 18px;
+  background: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan);
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Input */
+.input-area {
+  padding: 16px 40px 28px;
+}
+
+.input-container {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.input-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.input-box::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.input-box:focus-within {
+  border-color: rgba(34, 211, 238, 0.15);
+}
+
+.input-box:focus-within::before {
+  opacity: 0.6;
+}
+
+.input-box textarea {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-0);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.5;
+  resize: none;
+  min-height: 22px;
+  max-height: 120px;
+}
+
+.input-box textarea::placeholder {
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.send-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  background: transparent;
+  color: var(--neon-cyan);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+}
+
+.send-btn:hover {
+  background: rgba(34, 211, 238, 0.08);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.15);
+}
+
+.send-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.input-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+  letter-spacing: 0.5px;
+}
+
+.input-hint kbd {
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+</style>
+</head>
+<body>
+<div class="grid-overlay"></div>
+<div class="scanline"></div>
+<div class="neon-line-top"></div>
+
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">
+        <div class="brand-logo"><span>BI</span></div>
+        <div class="brand-name"><span>Bistel</span>ligence</div>
+      </div>
+      <button class="new-chat-btn">
+        <span class="plus">+</span> new_session()
+      </button>
+    </div>
+    <div class="section-label">// Recent</div>
+    <div class="chat-list">
+      <div class="chat-item active">
+        <div class="chat-item-title">Vue 3 Migration Plan</div>
+        <div class="chat-item-meta">today &middot; 3 msgs</div>
+      </div>
+      <div class="chat-item">
+        <div class="chat-item-title">SSE Streaming Architecture</div>
+        <div class="chat-item-meta">yesterday &middot; 12 msgs</div>
+      </div>
+      <div class="chat-item">
+        <div class="chat-item-title">PostgreSQL Docker Setup</div>
+        <div class="chat-item-meta">2d ago &middot; 8 msgs</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="status-dot"></div>
+        <div class="topbar-title">Vue 3 Migration Plan</div>
+      </div>
+      <div class="model-tag">GPT-5 Nano</div>
+    </div>
+
+    <div class="messages">
+      <div class="message user">
+        <div class="msg-indicator"></div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">You</span>
+            <span class="msg-time">11:24:30</span>
+          </div>
+          <div class="msg-content">
+            <p>Vue 3 마이그레이션 계획을 세워줘. 기존 React 프로젝트를 Composition API 기반으로 전환하고 싶어.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="message ai">
+        <div class="msg-indicator"></div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">Bistelligence</span>
+            <span class="msg-time">11:24:35</span>
+          </div>
+          <div class="msg-content">
+            <p>마이그레이션 전략을 수립했습니다. 핵심 전환 사항을 정리해드릴게요.</p>
+            <p><strong>Phase 1 &mdash; Foundation</strong></p>
+            <ul>
+              <li>Vite + Vue 3 + TypeScript scaffolding</li>
+              <li>Pinia 도입 &mdash; <code>useState</code> &rarr; <code>defineStore</code></li>
+              <li>환경변수: <code>REACT_APP_*</code> &rarr; <code>VITE_*</code></li>
+            </ul>
+            <p><strong>Phase 2 &mdash; Components</strong></p>
+            <ul>
+              <li><code>&lt;script setup&gt;</code> 패턴으로 SFC 재작성</li>
+              <li>React hooks &rarr; Vue Composables</li>
+              <li>markdown-it + highlight.js 통합</li>
+            </ul>
+            <p>전체 20개 파일 중 11개 핵심 재작성이 필요합니다.<span class="cursor"></span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-container">
+        <div class="input-box">
+          <textarea rows="1" placeholder="> enter prompt_"></textarea>
+          <button class="send-btn">
+            <svg viewBox="0 0 24 24"><path d="M5 12l14-7-7 14v-7H5z"/></svg>
+          </button>
+        </div>
+        <div class="input-hint">
+          <span><kbd>Enter</kbd> send</span>
+          <span><kbd>Shift+Enter</kbd> newline</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

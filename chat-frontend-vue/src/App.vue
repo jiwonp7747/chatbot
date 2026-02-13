@@ -1,5 +1,12 @@
 <template>
   <div class="app">
+    <!-- Ambient background -->
+    <div class="ambient">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
     <SidebarPanel
       :sessions="store.sessions"
       :current-session-id="store.currentSessionId"
@@ -23,7 +30,7 @@
       <ChatInput
         :is-streaming="store.isStreaming"
         :disabled="false"
-        :placeholder="store.isStreaming ? '응답을 기다리는 중...' : '메시지를 입력하세요...'"
+        :placeholder="store.isStreaming ? '응답을 기다리는 중...' : 'Ask anything...'"
         @send="store.sendMessage"
         @stop="store.stopStreaming"
       />
@@ -48,11 +55,61 @@ onMounted(() => {
 
 <style scoped>
 .app {
+  position: relative;
   display: flex;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background-color: var(--bg-primary);
+  background-color: var(--surface-0);
+}
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.35;
+  animation: drift 20s ease-in-out infinite alternate;
+}
+
+.ambient .orb-1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  top: -200px;
+  left: -100px;
+}
+
+.ambient .orb-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, var(--emerald) 0%, transparent 70%);
+  bottom: -200px;
+  right: -100px;
+  animation-delay: -10s;
+}
+
+.ambient .orb-3 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, #f472b6 0%, transparent 70%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.15;
+  animation-delay: -5s;
+}
+
+@keyframes drift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(40px, -30px) scale(1.1); }
 }
 
 .main-content {
@@ -61,5 +118,7 @@ onMounted(() => {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 </style>

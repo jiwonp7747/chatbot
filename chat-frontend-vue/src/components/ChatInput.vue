@@ -99,40 +99,48 @@ function handleKeyDown(e: KeyboardEvent) {
 
 <style scoped>
 .chat-input {
-  padding: 20px;
-  background-color: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  padding: 16px 32px 24px;
+  position: relative;
+  z-index: 1;
 }
 
 .chat-input-container {
+  max-width: 860px;
+  margin: 0 auto;
   position: relative;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 12px 60px 12px 16px;
-  transition: border-color 0.2s ease;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .chat-input-container:focus-within {
-  border-color: var(--accent-color);
+  border-color: rgba(129, 140, 248, 0.3);
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 .chat-input-field {
-  width: 100%;
-  background: transparent;
+  flex: 1;
+  background: none;
   border: none;
   outline: none;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-family: inherit;
-  resize: none;
-  max-height: 200px;
-  overflow-y: auto;
+  color: var(--text-0);
+  font-family: var(--font);
+  font-size: 14.5px;
   line-height: 1.5;
+  resize: none;
+  min-height: 24px;
+  max-height: 120px;
 }
 
 .chat-input-field::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-2);
 }
 
 .chat-input-field:disabled {
@@ -141,38 +149,42 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 .chat-input-send {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: none;
-  background-color: var(--accent-color);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: white;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  flex-shrink: 0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px var(--accent-glow);
 }
 
 .chat-input-send:hover:not(:disabled) {
-  background-color: var(--accent-hover);
-  transform: scale(1.05);
+  transform: scale(1.06);
+  box-shadow: 0 4px 20px rgba(129, 140, 248, 0.3);
 }
 
 .chat-input-send:disabled {
-  background-color: var(--bg-hover);
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.3;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
 }
 
 .chat-input-hint {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-tertiary);
   text-align: center;
+  font-size: 11.5px;
+  color: var(--text-2);
+  margin-top: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.3px;
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
 }
 </style>

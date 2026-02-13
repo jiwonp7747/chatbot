@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept A: Glass Noir - Bistelligence AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-hover: rgba(255, 255, 255, 0.07);
+  --surface-0: #09090b;
+  --surface-1: #0f0f12;
+  --surface-2: #18181c;
+  --text-0: #fafafa;
+  --text-1: #a1a1aa;
+  --text-2: #52525b;
+  --accent: #818cf8;
+  --accent-glow: rgba(129, 140, 248, 0.15);
+  --accent-soft: rgba(129, 140, 248, 0.08);
+  --emerald: #34d399;
+  --emerald-glow: rgba(52, 211, 153, 0.12);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --font: 'DM Sans', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--surface-0);
+  color: var(--text-0);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Ambient background */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambient .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.35;
+  animation: drift 20s ease-in-out infinite alternate;
+}
+.ambient .orb-1 {
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  top: -200px; left: -100px;
+  animation-delay: 0s;
+}
+.ambient .orb-2 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, var(--emerald) 0%, transparent 70%);
+  bottom: -200px; right: -100px;
+  animation-delay: -10s;
+}
+.ambient .orb-3 {
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, #f472b6 0%, transparent 70%);
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.15;
+  animation-delay: -5s;
+}
+@keyframes drift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(40px, -30px) scale(1.1); }
+}
+
+/* Layout */
+.app {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 300px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-bg);
+  backdrop-filter: blur(40px) saturate(1.5);
+  -webkit-backdrop-filter: blur(40px) saturate(1.5);
+  border-right: 1px solid var(--glass-border);
+}
+
+.sidebar-header {
+  padding: 28px 24px 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), var(--emerald));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: -1px;
+}
+
+.brand-text {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.new-chat-btn {
+  width: 100%;
+  padding: 11px 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-family: var(--font);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.new-chat-btn:hover {
+  background: var(--glass-hover);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--text-0);
+}
+
+.new-chat-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.chat-list::-webkit-scrollbar { width: 4px; }
+.chat-list::-webkit-scrollbar-track { background: transparent; }
+.chat-list::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 4px; }
+
+.chat-item {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.chat-item:hover {
+  background: var(--glass-bg);
+}
+
+.chat-item.active {
+  background: var(--accent-soft);
+  border-color: rgba(129, 140, 248, 0.15);
+}
+
+.chat-item-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+
+.chat-item.active .chat-item-title {
+  color: var(--accent);
+}
+
+.chat-item-date {
+  font-size: 11.5px;
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  gap: 8px;
+}
+
+.empty-state-icon {
+  font-size: 32px;
+  opacity: 0.3;
+}
+
+.empty-state-text {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* Main */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+}
+
+/* Top bar */
+.topbar {
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.topbar-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-0);
+  letter-spacing: -0.2px;
+}
+
+.model-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.model-badge:hover {
+  background: var(--glass-hover);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.model-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--emerald);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--emerald-glow);
+}
+
+/* Welcome */
+.welcome {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.welcome h1 {
+  font-size: 52px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, var(--text-0) 30%, var(--accent) 70%, var(--emerald));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.1;
+}
+
+.welcome p {
+  font-size: 17px;
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+/* Messages */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 0;
+}
+
+.messages::-webkit-scrollbar { width: 5px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
+
+.message {
+  padding: 20px 32px;
+  display: flex;
+  gap: 16px;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
+  animation: fadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.message.user .msg-avatar {
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.15), rgba(129, 140, 248, 0.05));
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  color: var(--accent);
+}
+
+.message.ai .msg-avatar {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.15), rgba(52, 211, 153, 0.05));
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  color: var(--emerald);
+}
+
+.msg-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.msg-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+
+.msg-time {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--mono);
+}
+
+.msg-content {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--text-1);
+}
+
+.msg-content p { margin-bottom: 12px; }
+.msg-content p:last-child { margin-bottom: 0; }
+
+.msg-content ul, .msg-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.msg-content li {
+  margin: 4px 0;
+}
+
+.msg-content code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: rgba(129, 140, 248, 0.08);
+  padding: 2px 7px;
+  border-radius: 5px;
+  color: var(--accent);
+  border: 1px solid rgba(129, 140, 248, 0.1);
+}
+
+.msg-content pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.msg-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Typing indicator */
+.typing {
+  display: flex;
+  gap: 5px;
+  padding: 4px 0;
+}
+.typing span {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: bounce 1.4s infinite;
+  opacity: 0.4;
+}
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* Input */
+.input-area {
+  padding: 16px 32px 24px;
+}
+
+.input-container {
+  max-width: 860px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.input-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.input-box:focus-within {
+  border-color: rgba(129, 140, 248, 0.3);
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.input-box textarea {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-0);
+  font-family: var(--font);
+  font-size: 14.5px;
+  line-height: 1.5;
+  resize: none;
+  min-height: 24px;
+  max-height: 120px;
+}
+
+.input-box textarea::placeholder {
+  color: var(--text-2);
+}
+
+.send-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, var(--accent), #6366f1);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.send-btn:hover {
+  transform: scale(1.06);
+  box-shadow: 0 4px 20px rgba(129, 140, 248, 0.3);
+}
+
+.send-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.send-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: white;
+}
+
+.input-hint {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-2);
+  margin-top: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.3px;
+}
+</style>
+</head>
+<body>
+<div class="ambient">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">
+        <div class="brand-icon">Bi</div>
+        <div class="brand-text">Bistelligence</div>
+      </div>
+      <button class="new-chat-btn">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Chat
+      </button>
+    </div>
+    <div class="chat-list">
+      <div class="chat-item active">
+        <div class="chat-item-title">Vue 3 Migration Plan</div>
+        <div class="chat-item-date">Today</div>
+      </div>
+      <div class="chat-item">
+        <div class="chat-item-title">SSE Streaming Architecture</div>
+        <div class="chat-item-date">Yesterday</div>
+      </div>
+      <div class="chat-item">
+        <div class="chat-item-title">PostgreSQL Docker Setup</div>
+        <div class="chat-item-date">2 days ago</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">Vue 3 Migration Plan</div>
+      <div class="model-badge">
+        <span class="model-dot"></span>
+        GPT-5 Nano
+      </div>
+    </div>
+
+    <div class="messages">
+      <div class="message user">
+        <div class="msg-avatar">J</div>
+        <div class="msg-body">
+          <div class="msg-meta">
+            <span class="msg-name">You</span>
+            <span class="msg-time">11:24</span>
+          </div>
+          <div class="msg-content">
+            <p>Vue 3 마이그레이션 계획을 세워줘. 기존 React 프로젝트를 Composition API 기반으로 전환하고 싶어.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="message ai">
+        <div class="msg-avatar">Bi</div>
+        <div class="msg-body">
+          <div class="msg-meta">
+            <span class="msg-name">Bistelligence</span>
+            <span class="msg-time">11:24</span>
+          </div>
+          <div class="msg-content">
+            <p>Vue 3 마이그레이션 계획을 정리해드릴게요. 핵심 전환 포인트를 단계별로 나눠보겠습니다.</p>
+            <p><strong>Phase 1: Project Setup</strong></p>
+            <ul>
+              <li>Vite + Vue 3 + TypeScript 프로젝트 초기화</li>
+              <li>Pinia 상태 관리 도입 (<code>useState</code> &rarr; <code>defineStore</code>)</li>
+              <li>환경변수 전환: <code>REACT_APP_*</code> &rarr; <code>VITE_*</code></li>
+            </ul>
+            <p><strong>Phase 2: Component Migration</strong></p>
+            <ul>
+              <li><code>&lt;script setup&gt;</code> + <code>defineProps/defineEmits</code> 패턴</li>
+              <li>React hooks &rarr; Vue Composables</li>
+              <li>CSS Modules &rarr; <code>&lt;style scoped&gt;</code></li>
+            </ul>
+            <p>전체 마이그레이션은 약 20개 파일이 대상이며, 핵심 재작성은 11개 파일입니다.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="message ai">
+        <div class="msg-avatar">Bi</div>
+        <div class="msg-body">
+          <div class="msg-meta">
+            <span class="msg-name">Bistelligence</span>
+            <span class="msg-time">11:25</span>
+          </div>
+          <div class="msg-content">
+            <div class="typing">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-container">
+        <div class="input-box">
+          <textarea rows="1" placeholder="Ask anything..."></textarea>
+          <button class="send-btn">
+            <svg viewBox="0 0 24 24"><path d="M5 12l14-7-7 14v-7H5z"/></svg>
+          </button>
+        </div>
+        <div class="input-hint">Enter to send &middot; Shift+Enter for new line</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

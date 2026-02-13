@@ -123,33 +123,52 @@ function handleModelSelect(model: ModelType) {
 }
 
 .model-selector-btn {
-  padding: 8px 16px;
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--text-1);
+  cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 160px;
+  min-width: unset;
 }
 
 .model-selector-btn:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--text-tertiary);
+  background: var(--glass-hover);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.model-selector-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .model-selector-label {
   font-weight: 500;
 }
 
+.model-selector-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--emerald);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--emerald-glow);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
 .model-selector-arrow {
-  font-size: 10px;
+  font-size: 9px;
   transition: transform 0.2s ease;
-  color: var(--text-secondary);
+  color: var(--text-2);
 }
 
 .model-selector-arrow.open {
@@ -159,21 +178,23 @@ function handleModelSelect(model: ModelType) {
 .model-selector-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
   right: 0;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  min-width: 240px;
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .model-option {
   padding: 12px 16px;
   cursor: pointer;
   transition: background-color 0.2s ease;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .model-option:last-child {
@@ -181,28 +202,26 @@ function handleModelSelect(model: ModelType) {
 }
 
 .model-option:hover {
-  background-color: var(--bg-hover);
+  background: var(--glass-hover);
 }
 
 .model-option.selected {
-  background-color: var(--bg-hover);
+  background: var(--accent-soft);
 }
 
-.model-option.selected::before {
-  content: '✓ ';
-  color: var(--accent-color);
-  font-weight: bold;
+.model-option.selected .model-option-label {
+  color: var(--accent);
 }
 
 .model-option-label {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-0);
   margin-bottom: 4px;
 }
 
 .model-option-description {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-2);
 }
 </style>
