@@ -21,20 +21,21 @@ while IFS= read -r line || [ -n "$line" ]; do
   # 빈 줄, 주석 스킵
   [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
 
-  # KEY=VALUE 형태만 처리
-  if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-    KEY="${BASH_REMATCH[1]}"
-    VALUE="${BASH_REMATCH[2]}"
+  # KEY=VALUE 형태만 처리 (= 기준으로 분리, bash/zsh 호환)
+  KEY="${line%%=*}"
+  VALUE="${line#*=}"
 
-    # 따옴표 제거
-    VALUE="${VALUE#\"}"
-    VALUE="${VALUE%\"}"
-    VALUE="${VALUE#\'}"
-    VALUE="${VALUE%\'}"
+  # KEY 유효성 검사 (공백/특수문자 포함 시 스킵)
+  [[ -z "$KEY" || "$KEY" =~ [^A-Za-z0-9_] ]] && continue
 
-    export "$KEY=$VALUE"
-    COUNT=$((COUNT + 1))
-  fi
+  # 따옴표 제거
+  VALUE="${VALUE#\"}"
+  VALUE="${VALUE%\"}"
+  VALUE="${VALUE#\'}"
+  VALUE="${VALUE%\'}"
+
+  export "$KEY=$VALUE"
+  COUNT=$((COUNT + 1))
 done < "$ENV_FILE"
 
 echo "[load_env] $ENV_FILE 로드 완료 ($COUNT개 환경변수)"

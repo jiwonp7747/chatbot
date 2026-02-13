@@ -9,7 +9,7 @@ class AuthConfig(BaseModel):
     token_from_header: Optional[str] = Field(None, alias="tokenFromHeader")
 
 class MCPServerConfig(BaseModel):
-    transport: str  # "sse" or "stdio"
+    transport: str  # "sse", "stdio", or "streamable-http"
     url: Optional[str] = None  # SSE transport
     command: Optional[str] = None  # Stdio transport
     args: list[str] = Field(default_factory=list)

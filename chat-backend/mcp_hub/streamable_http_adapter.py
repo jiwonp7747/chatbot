@@ -1,9 +1,10 @@
-"""SSE 전송 기반 MCP 어댑터"""
+"""Streamable HTTP 전송 기반 MCP 어댑터"""
 import logging
 from typing import Any
 
+import httpx
 from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamable_http_client
 from opentelemetry.propagate import inject
 
 from .adapter import MCPAdapter
@@ -20,8 +21,8 @@ def _get_tool_description(tool) -> str:
     return "설명이 없는 도구입니다."
 
 
-class SSEAdapter(MCPAdapter):
-    """SSE 전송 기반 MCP 어댑터"""
+class StreamableHTTPAdapter(MCPAdapter):
+    """Streamable HTTP 전송 기반 MCP 어댑터"""
 
     def __init__(self, name: str, config: dict):
         super().__init__(name, config)
@@ -29,10 +30,10 @@ class SSEAdapter(MCPAdapter):
         self.auth = config.get("auth")
 
     async def connect(self) -> None:
-        """SSE 서버 연결 확인 및 도구 목록 캐싱"""
+        """Streamable HTTP 서버 연결 확인 및 도구 목록 캐싱"""
         try:
-            logger.info(f"🔌 [{self.name}] SSE 서버 연결 시도: {self.url}")
-            async with sse_client(self.url) as (read, write):
+            logger.info(f"🔌 [{self.name}] Streamable HTTP 서버 연결 시도: {self.url}")
+            async with streamable_http_client(self.url) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     tools_list = await session.list_tools()
@@ -55,7 +56,7 @@ class SSEAdapter(MCPAdapter):
         return self._tools
 
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
-        """SSE 연결로 도구 호출"""
+        """Streamable HTTP 연결로 도구 호출"""
         try:
             logger.info(f"🔨 [{self.name}] 도구 호출: {tool_name}")
 
@@ -63,7 +64,7 @@ class SSEAdapter(MCPAdapter):
             headers = {}
             inject(headers)
 
-            async with sse_client(self.url, headers=headers) as (read, write):
+            async with streamable_http_client(self.url, http_client=httpx.AsyncClient(headers=headers)) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     result = await session.call_tool(tool_name, arguments=arguments)
@@ -82,7 +83,7 @@ class SSEAdapter(MCPAdapter):
             return {"success": False, "error": str(e), "result": None}
 
     async def disconnect(self) -> None:
-        """SSE는 요청별 연결이므로 별도 disconnect 불필요"""
+        """Streamable HTTP는 요청별 연결이므로 별도 disconnect 불필요"""
         logger.info(f"🔌 [{self.name}] 어댑터 종료")
         self._tools = []
 

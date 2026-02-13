@@ -6,6 +6,7 @@ from .adapter import MCPAdapter
 from .config import load_mcp_config
 from .sse_adapter import SSEAdapter
 from .stdio_adapter import StdioAdapter
+from .streamable_http_adapter import StreamableHTTPAdapter
 
 logger = logging.getLogger("chat-server")
 
@@ -57,6 +58,8 @@ class MCPRegistry:
             return SSEAdapter(name, config)
         elif transport == "stdio":
             return StdioAdapter(name, config)
+        elif transport == "streamable-http":
+            return StreamableHTTPAdapter(name, config)
         else:
             logger.error(f"❌ [{name}] 지원하지 않는 전송 타입: {transport}")
             return None
