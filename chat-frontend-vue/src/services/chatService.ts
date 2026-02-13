@@ -1,5 +1,20 @@
-import { getStreamChatUrl, getSessionsUrl, getMessagesUrl } from '../config/api';
-import { ChatRequest, ChatResponse, SessionsApiResponse, ChatSession, MessagesApiResponse, Message } from '../types/chat';
+import {
+  getStreamChatUrl,
+  getSessionsUrl,
+  getMessagesUrl,
+  getDeleteSessionUrl,
+  getUpdateSessionTitleUrl,
+} from '../config/api';
+import {
+  ChatRequest,
+  ChatResponse,
+  SessionsApiResponse,
+  ChatSession,
+  MessagesApiResponse,
+  Message,
+  ApiResponse,
+  SessionData,
+} from '../types/chat';
 import Cookies from "js-cookie";
 
 export class ChatService {
@@ -171,6 +186,59 @@ export class ChatService {
       console.error('Error fetching messages:', error);
       throw error;
     }
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    const url = getDeleteSessionUrl(sessionId);
+    const token = Cookies.get('LOGIN_TOKEN');
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const apiResponse: ApiResponse<null> = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || '세션 삭제에 실패했습니다.');
+    }
+  }
+
+  async updateSessionTitle(sessionId: string, sessionTitle: string): Promise<ChatSession> {
+    const url = getUpdateSessionTitleUrl(sessionId);
+    const token = Cookies.get('LOGIN_TOKEN');
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ session_title: sessionTitle }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const apiResponse: ApiResponse<SessionData> = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || '세션 제목 변경에 실패했습니다.');
+    }
+
+    const updated = apiResponse.data;
+    return {
+      id: updated.chat_session_id.toString(),
+      title: updated.session_title,
+      messages: [],
+      model: 'gpt-5-nano' as const,
+      createdAt: new Date(updated.created_at).getTime(),
+      updatedAt: new Date(updated.updated_at).getTime(),
+    };
   }
 }
 

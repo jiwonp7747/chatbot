@@ -288,3 +288,42 @@ async def get_available_model_list(
     model_query = select(ModelType).where(ModelType.is_active.is_(True)).order_by(asc(ModelType.model_id))
     result = await db.execute(model_query)
     return result.scalars().all()
+
+
+async def delete_chat_session(
+        chat_session_id: int,
+        db: AsyncSession,
+):
+    session_query = select(ChatSession).where(ChatSession.chat_session_id == chat_session_id)
+    session_result = await db.execute(session_query)
+    chat_session = session_result.scalar_one_or_none()
+
+    if not chat_session:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, "존재하지 않는 채팅 세션입니다")
+
+    await db.delete(chat_session)
+    await db.commit()
+
+
+async def update_chat_session_title(
+        chat_session_id: int,
+        session_title: str,
+        db: AsyncSession,
+):
+    normalized_title = (session_title or "").strip()
+    if not normalized_title:
+        raise ApiException(FailureCode.BAD_REQUEST, "세션 제목은 비어있을 수 없습니다")
+
+    session_query = select(ChatSession).where(ChatSession.chat_session_id == chat_session_id)
+    session_result = await db.execute(session_query)
+    chat_session = session_result.scalar_one_or_none()
+
+    if not chat_session:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, "존재하지 않는 채팅 세션입니다")
+
+    chat_session.session_title = normalized_title
+    chat_session.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(chat_session)
+
+    return chat_session

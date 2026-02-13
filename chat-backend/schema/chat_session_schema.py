@@ -15,6 +15,10 @@ class ChatSessionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class ChatSessionTitleUpdateRequest(BaseModel):
+    session_title: str
+
 class ChatMessageResponse(BaseModel):
     chat_message_id: int
     role: str

@@ -12,6 +12,8 @@
       :current-session-id="store.currentSessionId"
       @session-select="store.selectSession"
       @new-chat="store.newChat"
+      @session-delete="handleSessionDelete"
+      @session-rename="handleSessionRename"
     />
     <div class="main-content">
       <WelcomePage
@@ -51,6 +53,24 @@ const store = useChatStore();
 onMounted(() => {
   store.loadSessions();
 });
+
+async function handleSessionDelete(sessionId: string) {
+  try {
+    await store.deleteSession(sessionId);
+  } catch (error) {
+    console.error('세션 삭제 실패:', error);
+    window.alert('세션 삭제에 실패했습니다. 잠시 후 다시 시도해주세요.');
+  }
+}
+
+async function handleSessionRename(payload: { id: string; title: string }) {
+  try {
+    await store.renameSession(payload.id, payload.title);
+  } catch (error) {
+    console.error('세션 제목 변경 실패:', error);
+    window.alert('세션 제목 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
+  }
+}
 </script>
 
 <style scoped>

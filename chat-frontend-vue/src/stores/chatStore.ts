@@ -252,5 +252,33 @@ export const useChatStore = defineStore('chat', {
         storage.saveSession(updated);
       }
     },
+
+    async deleteSession(sessionId: string) {
+      await chatService.deleteSession(sessionId);
+
+      this.sessions = this.sessions.filter(session => session.id !== sessionId);
+      storage.deleteSession(sessionId);
+
+      if (this.currentSessionId === sessionId) {
+        this.currentSessionId = null;
+      }
+    },
+
+    async renameSession(sessionId: string, newTitle: string) {
+      const trimmedTitle = newTitle.trim();
+      if (!trimmedTitle) return;
+
+      const updatedFromApi = await chatService.updateSessionTitle(sessionId, trimmedTitle);
+      const idx = this.sessions.findIndex(session => session.id === sessionId);
+      if (idx === -1) return;
+
+      const updatedSession = {
+        ...this.sessions[idx],
+        title: updatedFromApi.title,
+        updatedAt: updatedFromApi.updatedAt,
+      };
+      this.sessions[idx] = updatedSession;
+      storage.saveSession(updatedSession);
+    },
   },
 });

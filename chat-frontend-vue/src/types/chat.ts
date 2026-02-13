@@ -57,3 +57,10 @@ export interface MessagesApiResponse {
   data: MessageData[];
   status_code: number;
 }
+
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  message: string;
+  data: T;
+  status_code: number;
+}

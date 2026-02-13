@@ -20,9 +20,69 @@
         v-for="session in sessions"
         :key="session.id"
         :class="['chat-item', { active: currentSessionId === session.id }]"
-        @click="emit('session-select', session.id)"
+        @click="onSessionSelect(session.id)"
       >
-        <div class="chat-item-title">{{ session.title }}</div>
+        <div class="chat-item-row">
+          <template v-if="editingSessionId === session.id">
+            <input
+              ref="editInputRef"
+              v-model="editingTitle"
+              class="chat-title-input"
+              type="text"
+              maxlength="60"
+              @click.stop
+              @keydown.enter.stop.prevent="submitRename(session.id, session.title)"
+              @keydown.esc.stop.prevent="cancelRename"
+            />
+            <div class="chat-item-actions editing">
+              <button
+                class="session-action-btn"
+                type="button"
+                aria-label="제목 저장"
+                title="제목 저장"
+                data-tooltip="저장"
+                @click.stop="submitRename(session.id, session.title)"
+              >
+                ✓
+              </button>
+              <button
+                class="session-action-btn"
+                type="button"
+                aria-label="수정 취소"
+                title="수정 취소"
+                data-tooltip="취소"
+                @click.stop="cancelRename"
+              >
+                ↺
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="chat-item-title">{{ session.title }}</div>
+            <div class="chat-item-actions">
+              <button
+                class="session-action-btn"
+                type="button"
+                aria-label="제목 변경"
+                title="제목 변경"
+                data-tooltip="제목 수정"
+                @click.stop="startRenameSession(session.id, session.title)"
+              >
+                ✎
+              </button>
+              <button
+                class="session-action-btn danger"
+                type="button"
+                aria-label="채팅 삭제"
+                title="채팅 삭제"
+                data-tooltip="채팅 삭제"
+                @click.stop="onDeleteSession(session.id, session.title)"
+              >
+                ×
+              </button>
+            </div>
+          </template>
+        </div>
         <div class="chat-item-info">
           <span class="chat-item-date">{{ formatTimestamp(session.updatedAt) }}</span>
         </div>
@@ -32,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, ref } from 'vue';
 import type { ChatSession } from '../types/chat';
 
 defineProps<{
@@ -42,7 +103,50 @@ defineProps<{
 const emit = defineEmits<{
   'session-select': [id: string];
   'new-chat': [];
+  'session-delete': [id: string];
+  'session-rename': [payload: { id: string; title: string }];
 }>();
+
+const editingSessionId = ref<string | null>(null);
+const editingTitle = ref('');
+const editInputRef = ref<HTMLInputElement | null>(null);
+
+function onSessionSelect(id: string) {
+  if (editingSessionId.value) return;
+  emit('session-select', id);
+}
+
+function onDeleteSession(id: string, title: string) {
+  const ok = window.confirm(`'${title}' 채팅을 삭제할까요?`);
+  if (!ok) return;
+  emit('session-delete', id);
+}
+
+function startRenameSession(id: string, currentTitle: string) {
+  editingSessionId.value = id;
+  editingTitle.value = currentTitle;
+
+  nextTick(() => {
+    editInputRef.value?.focus();
+    editInputRef.value?.select();
+  });
+}
+
+function cancelRename() {
+  editingSessionId.value = null;
+  editingTitle.value = '';
+}
+
+function submitRename(id: string, currentTitle: string) {
+  const trimmed = editingTitle.value.trim();
+  if (!trimmed || trimmed === currentTitle) {
+    cancelRename();
+    return;
+  }
+
+  emit('session-rename', { id, title: trimmed });
+  cancelRename();
+}
 
 function formatTimestamp(timestamp: number): string {
   const date = new Date(timestamp);
@@ -156,6 +260,14 @@ function formatTimestamp(timestamp: number): string {
   transition: all 0.2s ease;
 }
 
+.chat-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .chat-item:hover {
   background: var(--glass-bg);
 }
@@ -173,10 +285,111 @@ function formatTimestamp(timestamp: number): string {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--text-0);
-  margin-bottom: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+}
+
+.chat-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.8;
+  transition: opacity 0.18s ease;
+}
+
+.chat-item-actions.editing {
+  opacity: 1;
+}
+
+.chat-item:hover .chat-item-actions,
+.chat-item.active .chat-item-actions {
+  opacity: 1;
+}
+
+.chat-title-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-0);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 1.3;
+  outline: none;
+}
+
+.chat-title-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.session-action-btn {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.session-action-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: rgba(15, 23, 42, 0.95);
+  color: #f8fafc;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 20;
+}
+
+.session-action-btn::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  border-width: 5px 4px 0 4px;
+  border-style: solid;
+  border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 20;
+}
+
+.session-action-btn:hover::after,
+.session-action-btn:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.session-action-btn:hover {
+  background: var(--glass-hover);
+  border-color: var(--glass-border);
+  color: var(--text-1);
+}
+
+.session-action-btn.danger:hover {
+  color: #ef4444;
 }
 
 .chat-item-info {

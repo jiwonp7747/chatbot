@@ -20,6 +20,14 @@ export const getMessagesUrl = (sessionId: string): string => {
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.messages}/${sessionId}`;
 };
 
+export const getDeleteSessionUrl = (sessionId: string): string => {
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.sessions}/${sessionId}`;
+};
+
+export const getUpdateSessionTitleUrl = (sessionId: string): string => {
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.sessions}/${sessionId}/title`;
+};
+
 export const getAvailAbleModelListUrl = (): string => {
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.model}`;
 };
