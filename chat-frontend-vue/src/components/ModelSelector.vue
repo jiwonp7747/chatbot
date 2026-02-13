@@ -125,6 +125,7 @@ function handleModelSelect(model: ModelType) {
 .model-selector-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 6px 14px;
   background: var(--glass-bg);
@@ -150,7 +151,10 @@ function handleModelSelect(model: ModelType) {
 }
 
 .model-selector-label {
+  display: inline-flex;
+  align-items: center;
   font-weight: 500;
+  line-height: 1;
 }
 
 .model-selector-label::before {
@@ -161,8 +165,7 @@ function handleModelSelect(model: ModelType) {
   background: var(--emerald);
   border-radius: 50%;
   box-shadow: 0 0 8px var(--emerald-glow);
-  margin-right: 8px;
-  vertical-align: middle;
+  margin-right: 6px;
 }
 
 .model-selector-arrow {
@@ -178,12 +181,15 @@ function handleModelSelect(model: ModelType) {
 .model-selector-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
-  min-width: 240px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 220px;
+  max-height: min(240px, 38vh);
   background: var(--surface-2);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   z-index: 1000;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(20px);
@@ -191,10 +197,11 @@ function handleModelSelect(model: ModelType) {
 }
 
 .model-option {
-  padding: 12px 16px;
+  padding: 10px 14px;
   cursor: pointer;
   transition: background-color 0.2s ease;
   border-bottom: 1px solid var(--glass-border);
+  text-align: center;
 }
 
 .model-option:last-child {
