@@ -33,6 +33,7 @@ from graph.nodes import (
     stream_response_node
 )
 from .chat_service import save_chat_to_db  # 기존 DB 저장 로직 재사용
+from .model_resolver import resolve_model_config
 
 logger = logging.getLogger("chat-server")
 
@@ -278,6 +279,8 @@ async def process_chat_with_langgraph(
     set_user_chat_time(stream_id, user_chat_created_at)
 
     try:
+        resolved_model = await resolve_model_config(db, request.model)
+
         # 1. LangGraph 초기화
         chat_graph = ChatLangGraph(db)
 
@@ -285,7 +288,9 @@ async def process_chat_with_langgraph(
         initial_state: ChatGraphState = {
             "chat_session_id": request.chat_session_id,
             "user_prompt": request.prompt,
-            "model": request.model or "gpt-5.1-mini",
+            "model": resolved_model.model_key,
+            "api_model": resolved_model.api_model,
+            "provider": resolved_model.provider,
             "message_history": [],
             "intent_analysis": None,
             "available_tools": [],

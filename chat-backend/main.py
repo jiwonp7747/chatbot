@@ -15,7 +15,9 @@ from router import router as api_router
 from common.exceptionhandler import register_exception_handler
 from config.logger import setup_logging
 from db.database import AsyncSessionLocal, engine  # DB 엔진 및 세션
+from db.model_type_migration import ensure_model_type_schema
 from mcp_hub import get_mcp_registry
+from config.langfuse import init_langfuse_tracing
 
 
 # --- [Lifespan] 서버 시작/종료 시 실행될 로직 ---
@@ -27,6 +29,8 @@ async def lifespan(app: FastAPI):
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
         print("✅ 데이터베이스 연결 성공")
+        await ensure_model_type_schema(engine)
+        print("✅ model_type 스키마 보강 완료")
     except Exception as e:
         print(f"❌ 데이터베이스 연결 실패: {e}")
         # DB 연결 실패 시 서버를 켜지 않으려면 여기서 raise e
@@ -39,6 +43,9 @@ async def lifespan(app: FastAPI):
         await registry.initialize()
     except Exception as e:
         print(f"⚠️ MCP Registry 초기화 실패 (서버는 계속 동작): {e}")
+
+    # Langfuse OTEL 트레이싱 초기화
+    init_langfuse_tracing()
 
     print("✨ 서버 준비 완료")
     yield  # -------------------- [애플리케이션 가동 중] --------------------

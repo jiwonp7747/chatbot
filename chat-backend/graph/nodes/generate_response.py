@@ -7,7 +7,7 @@ import logging
 import json
 from typing import Dict, Any
 
-from client.openai_client import aclient
+from client.llm_adapter import get_llm_adapter
 from config.prompt import SYSTEM_PROMPT
 from graph.schema.graph_state import ChatGraphState
 
@@ -59,7 +59,8 @@ async def generate_response_node(
     intent_analysis = state.get("intent_analysis", {})
     tool_results = state.get("tool_results", [])
     iteration_count = state.get("iteration_count", 0)
-    model = state.get("model", "gpt-5.1-mini")
+    model = state.get("api_model", state.get("model", "gpt-5.1-mini"))
+    provider = state.get("provider")
 
     # 시스템 프롬프트로 시작
     messages = [
@@ -97,7 +98,8 @@ async def generate_response_node(
             logger.info("🤔 추가 도구 필요 여부 판단 중...")
 
             # gpt-5.1-mini는 temperature 커스텀 값을 지원하지 않으므로 제거
-            decision_response = await aclient.chat.completions.create(
+            llm_adapter = get_llm_adapter(model=model, provider=provider)
+            decision_response = await llm_adapter.create_completion(
                 model=model,
                 messages=[
                     {"role": "system", "content": TOOL_DECISION_PROMPT},

@@ -11,7 +11,9 @@ class ChatGraphState(TypedDict, total=False):
     # 입력 데이터
     chat_session_id: Optional[int]
     user_prompt: str
-    model: str
+    model: str  # model key
+    api_model: str
+    provider: str
 
     # 대화 기록
     message_history: List[Dict[str, str]]  # [{"role": "user", "content": "..."}, ...]

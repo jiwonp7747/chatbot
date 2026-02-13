@@ -5,7 +5,7 @@ from typing import AsyncGenerator, Optional
 from pydantic import BaseModel
 from starlette.requests import Request
 
-from client.openai_client import aclient
+from client.llm_adapter import get_llm_adapter
 from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
 from config.prompt import SYSTEM_PROMPT
@@ -22,6 +22,7 @@ from middleware.stream_tracker import (
     set_user_chat_time,
     get_stream_data
 )
+from service.model_resolver import resolve_model_config
 
 logger = logging.getLogger("chat-server")
 
@@ -181,10 +182,14 @@ async def process_chat_request(
         )
 
         # OpenAI API 호출 (stream=True)
-        stream = await aclient.chat.completions.create(
-            model=request.model,
+        resolved_model = await resolve_model_config(db, request.model)
+        llm_adapter = get_llm_adapter(
+            model=resolved_model.api_model,
+            provider=resolved_model.provider,
+        )
+        stream = await llm_adapter.stream_completion(
+            model=resolved_model.api_model,
             messages=messages,
-            stream=True
         )
 
         # 응답을 청크 단위로 스트리밍
@@ -261,24 +266,25 @@ async def create_chat_title(
     class ChatTitleResponse(BaseModel):
         title: str
     try:
-        # 1. 제목 생성을 위한 별도의 LLM 호출 (가벼운 모델 사용 권장: gpt-4o-mini 등)
-        completion = await aclient.beta.chat.completions.parse(
+        llm_adapter = get_llm_adapter(provider="OPENAI")
+        completion = await llm_adapter.parse_completion(
             model="gpt-4.1-nano",  # 싸고 빠른 모델 추천
             messages=[
                 {"role": "system", "content": "사용자의 질문과 AI의 답변을 바탕으로 이 채팅 세션의 주제를 15자 이내로 요약해서 제목을 지어주세요."},
                 {"role": "user", "content": f"질문: {user_prompt}\n\n답변: {ai_response}"}
             ],
-            response_format=ChatTitleResponse
+            response_model=ChatTitleResponse
         )
 
         return completion.choices[0].message.parsed.title
 
     except Exception as e:
-        print(f"❌ 제목 생성 실패: {e}")
+        logger.error(f"❌ 제목 생성 실패: {e}")
+        return (user_prompt or "새 채팅")[:15]
 
 async def get_available_model_list(
         db: AsyncSession,
 ):
-    model_query = select(ModelType)
+    model_query = select(ModelType).where(ModelType.is_active.is_(True)).order_by(asc(ModelType.model_id))
     result = await db.execute(model_query)
     return result.scalars().all()

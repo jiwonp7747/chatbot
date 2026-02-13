@@ -10,7 +10,7 @@ import logging
 import json
 from typing import Dict, Any
 
-from client.openai_client import aclient
+from client.llm_adapter import get_llm_adapter
 from graph.schema.graph_state import ChatGraphState
 
 logger = logging.getLogger("chat-server")
@@ -164,7 +164,8 @@ async def analyze_intent_node(
         업데이트된 상태 (intent_analysis, tools_to_call 포함)
     """
     user_prompt = state.get("user_prompt", "")
-    model = state.get("model", "gpt-5.1-mini")
+    model = state.get("api_model", state.get("model", "gpt-5.1-mini"))
+    provider = state.get("provider")
     available_tools = state.get("available_tools", [])
     token = state.get("token")
 
@@ -181,7 +182,8 @@ async def analyze_intent_node(
         logger.info(f"📐 Response Schema: {response_schema}")
 
         # OpenAI API를 통한 의도 분석 (Structured Outputs 사용)
-        response = await aclient.chat.completions.create(
+        llm_adapter = get_llm_adapter(model=model, provider=provider)
+        response = await llm_adapter.create_completion(
             model=model,
             messages=[
                 {"role": "system", "content": tool_analysis_prompt},

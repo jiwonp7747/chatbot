@@ -1,7 +1,8 @@
 """
 DB 초기화 스크립트
 - 테이블 생성 (chat_session, chat_message, model_type, prompt_template)
-- 시드 데이터 삽입 (모델 목록, 기본 시스템 프롬프트)
+- 스키마 보강 (model_type provider/api_model/is_active)
+- 시드 데이터 삽입/업데이트 (모델 목록, 기본 시스템 프롬프트)
 
 Usage:
     python init_db.py
@@ -13,6 +14,7 @@ import asyncio
 from sqlalchemy import text
 from db.database import engine, Base, AsyncSessionLocal
 from db.models import ChatSession, ChatMessage, ModelType, PromptTemplate
+from db.model_type_migration import ensure_model_type_schema
 
 
 async def create_tables():
@@ -23,20 +25,24 @@ async def create_tables():
 
 async def seed_models():
     async with AsyncSessionLocal() as session:
-        result = await session.execute(text('SELECT COUNT(*) FROM model_type'))
-        if result.scalar() > 0:
-            print("⏭️  모델 데이터 이미 존재 - 스킵")
-            return
-
         await session.execute(text("""
-            INSERT INTO model_type (model_name, model_type, summary) VALUES
-            ('GPT-5 Nano', 'gpt-5-nano', '빠르고 효율적인 경량 모델'),
-            ('GPT-4', 'gpt-4', '강력한 추론 능력의 대형 모델'),
-            ('Claude 3', 'claude-3', 'Anthropic의 최신 AI 모델'),
-            ('Gemini Pro', 'gemini-pro', 'Google의 멀티모달 AI 모델')
+            INSERT INTO model_type (model_name, model_type, provider, api_model, is_active, summary)
+            VALUES
+                ('GPT-5.1 Mini', 'gpt-5.1-mini', 'OPENAI', 'gpt-5.1-mini', TRUE, '균형형 기본 모델'),
+                ('GPT-5 Nano', 'gpt-5-nano', 'OPENAI', 'gpt-5-nano', TRUE, '빠르고 효율적인 경량 모델'),
+                ('GPT-4.1', 'gpt-4.1', 'OPENAI', 'gpt-4.1', TRUE, '강력한 추론 능력 모델'),
+                ('Gemini Pro', 'gemini-pro', 'GEMINI', 'gemini-pro', FALSE, 'Google 모델 (구현 전)'),
+                ('OCI Command R', 'oci-command-r', 'OCI', 'cohere.command-r-16k', FALSE, 'OCI 모델 (구현 전)'),
+                ('Local Llama3.1', 'local-llama3.1', 'LOCAL', 'llama3.1:8b', FALSE, '로컬 모델 (구현 전)')
+            ON CONFLICT (model_type) DO UPDATE SET
+                model_name = EXCLUDED.model_name,
+                provider = EXCLUDED.provider,
+                api_model = EXCLUDED.api_model,
+                is_active = EXCLUDED.is_active,
+                summary = EXCLUDED.summary
         """))
         await session.commit()
-        print("✅ 모델 시드 데이터 삽입 완료 (4개)")
+        print("✅ 모델 시드 데이터 삽입/업데이트 완료")
 
 
 async def seed_prompts():
@@ -58,6 +64,8 @@ async def seed_prompts():
 async def main():
     print("🚀 DB 초기화 시작...")
     await create_tables()
+    await ensure_model_type_schema(engine)
+    print("✅ model_type 스키마 보강 완료")
     await seed_models()
     await seed_prompts()
     await engine.dispose()

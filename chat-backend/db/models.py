@@ -36,7 +36,10 @@ class ModelType(Base):
 
     model_id = Column(BigInteger, primary_key=True, index=True)
     model_name = Column(String, nullable=True)
-    model_type = Column(String, nullable=True)
+    model_type = Column(String, nullable=True)  # 외부 입력/선택용 model key
+    provider = Column(String, nullable=True)
+    api_model = Column(String, nullable=True)  # 실제 provider SDK 호출 모델명
+    is_active = Column(Boolean, nullable=True, default=True)
     summary = Column(String, nullable=True)
 
 class PromptTemplate(Base):
@@ -48,4 +51,3 @@ class PromptTemplate(Base):
     is_active = Column(Boolean, nullable=True)
     priority = Column(Integer, nullable=True)
     content = Column(String, nullable=True)
-

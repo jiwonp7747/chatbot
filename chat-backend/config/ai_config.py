@@ -13,6 +13,8 @@ class AIProvider(Enum):
     OPENAI = "OPENAI"
     ANTHROPIC = "ANTHROPIC"
     GEMINI = "GEMINI"
+    OCI = "OCI"
+    LOCAL = "LOCAL"
 
 
 @dataclass

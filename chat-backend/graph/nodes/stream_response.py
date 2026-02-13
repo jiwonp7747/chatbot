@@ -8,7 +8,7 @@ import logging
 from typing import AsyncGenerator
 from starlette.requests import Request
 
-from client.openai_client import aclient
+from client.llm_adapter import get_llm_adapter
 from graph.schema.stream import ChatResponse, StreamStatus
 from graph.schema.graph_state import ChatGraphState
 from router.sse_util import SSEFormatter
@@ -32,7 +32,8 @@ async def stream_response_node(
         SSE 형식의 응답 청크
     """
     messages = state.get("messages", [])
-    model = state.get("model", "gpt-5.1-mini")
+    model = state.get("api_model", state.get("model", "gpt-5.1-mini"))
+    provider = state.get("provider")
     stream_id = state.get("stream_id")
 
     if not messages:
@@ -46,10 +47,10 @@ async def stream_response_node(
 
     try:
         # OpenAI API 호출 (stream=True)
-        stream = await aclient.chat.completions.create(
+        llm_adapter = get_llm_adapter(model=model, provider=provider)
+        stream = await llm_adapter.stream_completion(
             model=model,
             messages=messages,
-            stream=True
         )
 
         # 응답을 청크 단위로 스트리밍
