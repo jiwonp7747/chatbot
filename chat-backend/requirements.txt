@@ -1,6 +1,10 @@
 SQLAlchemy~=2.0.46
 fastapi~=0.124.0
+oci~=2.161.0
 pydantic~=2.12.5
 python-dotenv~=1.2.1
 starlette~=0.50.0
 uvicorn~=0.38.0
+
+langchain
+langgraph

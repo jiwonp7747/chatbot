@@ -11,8 +11,8 @@ from common.response.code import FailureCode
 from config.prompt import SYSTEM_PROMPT
 from db.models import ChatSession, ChatMessage, ModelType
 from db.database import get_db
-from graph.schema.stream import ChatRequest, ChatResponse, StreamStatus
-from router.sse_util import SSEFormatter
+from ai.graph.schema.stream import ChatRequest, ChatResponse, StreamStatus
+from util.sse_formatter import SSEFormatter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc, asc

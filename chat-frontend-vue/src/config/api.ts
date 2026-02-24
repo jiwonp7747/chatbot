@@ -1,10 +1,24 @@
+const normalizeBaseUrl = (rawBaseUrl: string): string => {
+  const withProtocol = /^https?:\/\//.test(rawBaseUrl) ? rawBaseUrl : `http://${rawBaseUrl}`;
+  return withProtocol.replace(/\/+$/, '');
+};
+
+const resolveDefaultBaseUrl = (): string => {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `http://${window.location.hostname}:8000`;
+  }
+  return 'http://localhost:8000';
+};
+
 export const API_CONFIG = {
-  baseUrl: import.meta.env.VITE_BASE_URL || 'localhost',
+  baseUrl: normalizeBaseUrl(import.meta.env.VITE_BASE_URL || resolveDefaultBaseUrl()),
   endpoints: {
     streamChat: '/chat/stream-chat-graph',
     sessions: '/chat/session',
     messages: '/chat/message',
-    model: '/chat/model'
+    model: '/chat/model',
+    mcpTools: '/mcp/tools',
+    ragTags: '/rag/tags'
   }
 };
 
@@ -30,4 +44,12 @@ export const getUpdateSessionTitleUrl = (sessionId: string): string => {
 
 export const getAvailAbleModelListUrl = (): string => {
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.model}`;
+};
+
+export const getMcpToolsUrl = (): string => {
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.mcpTools}`;
+};
+
+export const getRagTagsUrl = (): string => {
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.ragTags}`;
 };

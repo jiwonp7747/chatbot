@@ -4,6 +4,8 @@ import {
   getMessagesUrl,
   getDeleteSessionUrl,
   getUpdateSessionTitleUrl,
+  getMcpToolsUrl,
+  getRagTagsUrl,
 } from '../config/api';
 import {
   ChatRequest,
@@ -14,6 +16,9 @@ import {
   Message,
   ApiResponse,
   SessionData,
+  McpToolsApiResponse,
+  McpTool,
+  RagTagsApiResponse,
 } from '../types/chat';
 import Cookies from "js-cookie";
 
@@ -42,7 +47,8 @@ export class ChatService {
         body: JSON.stringify({
           prompt: request.prompt,
           model: request.model,
-          chat_session_id: request.chat_session_id ?? null
+          chat_session_id: request.chat_session_id ?? null,
+          rag_tags: request.rag_tags ?? null
         }),
         signal: this.abortController.signal
       });
@@ -239,6 +245,52 @@ export class ChatService {
       createdAt: new Date(updated.created_at).getTime(),
       updatedAt: new Date(updated.updated_at).getTime(),
     };
+  }
+
+  async fetchMcpTools(): Promise<McpTool[]> {
+    const url = getMcpToolsUrl();
+    const token = Cookies.get('LOGIN_TOKEN');
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const apiResponse: McpToolsApiResponse = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || 'MCP 도구 목록을 불러오는데 실패했습니다.');
+    }
+
+    return apiResponse.data;
+  }
+
+  async fetchRagTags(): Promise<string[]> {
+    const url = getRagTagsUrl();
+    const token = Cookies.get('LOGIN_TOKEN');
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const apiResponse: RagTagsApiResponse = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || 'RAG 태그 목록을 불러오는데 실패했습니다.');
+    }
+
+    return apiResponse.data;
   }
 }
 

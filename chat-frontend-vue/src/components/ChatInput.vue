@@ -6,6 +6,8 @@
         class="chat-input-field"
         v-model="message"
         @keydown="handleKeyDown"
+        @compositionstart="isComposing = true"
+        @compositionend="isComposing = false"
         :placeholder="placeholder"
         :disabled="disabled"
         rows="1"
@@ -67,6 +69,7 @@ const emit = defineEmits<{
 
 const message = ref('');
 const textareaRef = ref<HTMLTextAreaElement>();
+const isComposing = ref(false);
 
 watch(message, () => {
   nextTick(() => {
@@ -80,16 +83,24 @@ watch(message, () => {
 function handleSubmit() {
   if (props.isStreaming) {
     emit('stop');
-  } else if (message.value.trim() && !props.disabled) {
-    emit('send', message.value.trim());
+    return;
+  }
+
+  if (!props.disabled) {
+    const text = message.value.trim();
+    if (!text) return;
+
+    // 전송 이벤트 처리 중 예외/상태 변경이 있어도 입력창은 즉시 비움
     message.value = '';
     if (textareaRef.value) {
       textareaRef.value.style.height = 'auto';
     }
+    emit('send', text);
   }
 }
 
 function handleKeyDown(e: KeyboardEvent) {
+  if (isComposing.value) return;
   if (e.key === 'Enter' && !e.shiftKey && !props.isStreaming) {
     e.preventDefault();
     handleSubmit();

@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import asyncio
+import os
 from sqlalchemy import text
 from db.database import engine, Base, AsyncSessionLocal
 from db.models import ChatSession, ChatMessage, ModelType, PromptTemplate
@@ -25,6 +26,15 @@ async def create_tables():
 
 async def seed_models():
     async with AsyncSessionLocal() as session:
+        oci_model_id = os.getenv("OCI_MODEL_ID", "").strip()
+
+        # 이전 OCI 기본 모델(Command R) 엔트리는 비활성화
+        await session.execute(text("""
+            UPDATE model_type
+            SET is_active = FALSE
+            WHERE model_type = 'oci-command-r'
+        """))
+
         await session.execute(text("""
             INSERT INTO model_type (model_name, model_type, provider, api_model, is_active, summary)
             VALUES
@@ -32,7 +42,7 @@ async def seed_models():
                 ('GPT-5 Nano', 'gpt-5-nano', 'OPENAI', 'gpt-5-nano', TRUE, '빠르고 효율적인 경량 모델'),
                 ('GPT-4.1', 'gpt-4.1', 'OPENAI', 'gpt-4.1', TRUE, '강력한 추론 능력 모델'),
                 ('Gemini Pro', 'gemini-pro', 'GEMINI', 'gemini-pro', FALSE, 'Google 모델 (구현 전)'),
-                ('OCI Command R', 'oci-command-r', 'OCI', 'cohere.command-r-16k', FALSE, 'OCI 모델 (구현 전)'),
+                ('OCI Llama 3.3 70B', 'oci-llama-3.3-70b', 'OCI', COALESCE(NULLIF(:oci_model_id, ''), 'meta.llama-3.3-70b-instruct'), TRUE, 'OCI Llama 모델'),
                 ('Local Llama3.1', 'local-llama3.1', 'LOCAL', 'llama3.1:8b', FALSE, '로컬 모델 (구현 전)')
             ON CONFLICT (model_type) DO UPDATE SET
                 model_name = EXCLUDED.model_name,
@@ -40,6 +50,29 @@ async def seed_models():
                 api_model = EXCLUDED.api_model,
                 is_active = EXCLUDED.is_active,
                 summary = EXCLUDED.summary
+        """), {"oci_model_id": oci_model_id})
+
+        # 이전 OCI llama 3.1 키를 3.3 키로 승격
+        await session.execute(text("""
+            UPDATE model_type
+            SET model_name = 'OCI Llama 3.3 70B',
+                model_type = 'oci-llama-3.3-70b',
+                api_model = COALESCE(NULLIF(:oci_model_id, ''), 'meta.llama-3.3-70b-instruct'),
+                is_active = TRUE
+            WHERE model_type = 'oci-llama-3.1-70b'
+              AND NOT EXISTS (
+                SELECT 1 FROM model_type t2 WHERE t2.model_type = 'oci-llama-3.3-70b'
+              )
+        """), {"oci_model_id": oci_model_id})
+
+        # 3.3 키가 이미 있으면 3.1 키는 비활성화
+        await session.execute(text("""
+            UPDATE model_type
+            SET is_active = FALSE
+            WHERE model_type = 'oci-llama-3.1-70b'
+              AND EXISTS (
+                SELECT 1 FROM model_type t2 WHERE t2.model_type = 'oci-llama-3.3-70b'
+              )
         """))
         await session.commit()
         print("✅ 모델 시드 데이터 삽입/업데이트 완료")

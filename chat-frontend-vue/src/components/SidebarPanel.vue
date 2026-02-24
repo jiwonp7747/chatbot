@@ -9,6 +9,14 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New Chat
       </button>
+      <button class="mcp-tools-btn" @click="emit('mcp-tools-open')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9"/></svg>
+        MCP Tools
+      </button>
+      <button class="mcp-tools-btn" @click="emit('rag-tags-open')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        RAG Tags
+      </button>
     </div>
 
     <div class="chat-list">
@@ -103,6 +111,8 @@ defineProps<{
 const emit = defineEmits<{
   'session-select': [id: string];
   'new-chat': [];
+  'mcp-tools-open': [];
+  'rag-tags-open': [];
   'session-delete': [id: string];
   'session-rename': [payload: { id: string; title: string }];
 }>();
@@ -219,6 +229,28 @@ function formatTimestamp(timestamp: number): string {
   justify-content: center;
   gap: 8px;
   transition: all 0.2s ease;
+}
+
+.mcp-tools-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-1);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.mcp-tools-btn:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .new-chat-btn:hover {

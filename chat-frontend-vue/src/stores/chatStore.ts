@@ -10,6 +10,7 @@ interface ChatState {
   streamingSessionId: string | null;
   streamingContentMap: Record<string, string>;
   streamingStatusMap: Record<string, 'progress' | 'streaming'>;
+  selectedRagTags: string[];
 }
 
 export const useChatStore = defineStore('chat', {
@@ -20,6 +21,7 @@ export const useChatStore = defineStore('chat', {
     streamingSessionId: null,
     streamingContentMap: {},
     streamingStatusMap: {},
+    selectedRagTags: []
   }),
 
   getters: {
@@ -147,7 +149,8 @@ export const useChatStore = defineStore('chat', {
         {
           prompt: content,
           model: modelToUse,
-          chat_session_id: sessionId ? parseInt(sessionId) : null
+          chat_session_id: sessionId ? parseInt(sessionId) : null,
+          rag_tags: this.selectedRagTags
         },
         (response: ChatResponse) => {
           if (response.status === 'progress') {

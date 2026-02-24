@@ -12,6 +12,8 @@
       :current-session-id="store.currentSessionId"
       @session-select="store.selectSession"
       @new-chat="store.newChat"
+      @mcp-tools-open="openMcpToolsPanel"
+      @rag-tags-open="openRagTagsPanel"
       @session-delete="handleSessionDelete"
       @session-rename="handleSessionRename"
     />
@@ -37,18 +39,48 @@
         @stop="store.stopStreaming"
       />
     </div>
+
+    <McpToolsPanel
+      :open="isMcpPanelOpen"
+      :tools="mcpTools"
+      :loading="isMcpToolsLoading"
+      :error="mcpToolsError"
+      @close="isMcpPanelOpen = false"
+      @retry="loadMcpTools"
+    />
+    <RagTagsPanel
+      :open="isRagPanelOpen"
+      :tags="ragTags"
+      :loading="isRagTagsLoading"
+      :error="ragTagsError"
+      @close="isRagPanelOpen = false"
+      @retry="loadRagTags"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useChatStore } from './stores/chatStore';
 import SidebarPanel from './components/SidebarPanel.vue';
 import ChatInput from './components/ChatInput.vue';
 import WelcomePage from './pages/WelcomePage.vue';
 import ChatPage from './pages/ChatPage.vue';
+import McpToolsPanel from './components/McpToolsPanel.vue';
+import RagTagsPanel from './components/RagTagsPanel.vue';
+import { chatService } from './services/chatService';
+import type { McpTool } from './types/chat';
 
 const store = useChatStore();
+const isMcpPanelOpen = ref(false);
+const isMcpToolsLoading = ref(false);
+const mcpToolsError = ref<string | null>(null);
+const mcpTools = ref<McpTool[]>([]);
+
+const isRagPanelOpen = ref(false);
+const isRagTagsLoading = ref(false);
+const ragTagsError = ref<string | null>(null);
+const ragTags = ref<string[]>([]);
 
 onMounted(() => {
   store.loadSessions();
@@ -69,6 +101,48 @@ async function handleSessionRename(payload: { id: string; title: string }) {
   } catch (error) {
     console.error('세션 제목 변경 실패:', error);
     window.alert('세션 제목 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
+  }
+}
+
+async function loadMcpTools() {
+  isMcpToolsLoading.value = true;
+  mcpToolsError.value = null;
+
+  try {
+    mcpTools.value = await chatService.fetchMcpTools();
+  } catch (error) {
+    console.error('MCP 도구 목록 조회 실패:', error);
+    mcpToolsError.value = 'MCP 도구 목록을 불러오지 못했습니다.';
+  } finally {
+    isMcpToolsLoading.value = false;
+  }
+}
+
+async function loadRagTags() {
+  isRagTagsLoading.value = true;
+  ragTagsError.value = null;
+
+  try {
+    ragTags.value = await chatService.fetchRagTags();
+  } catch (error) {
+    console.error('RAG 태그 목록 조회 실패:', error);
+    ragTagsError.value = 'RAG 태그 목록을 불러오지 못했습니다.';
+  } finally {
+    isRagTagsLoading.value = false;
+  }
+}
+
+function openMcpToolsPanel() {
+  isMcpPanelOpen.value = true;
+  if (mcpTools.value.length === 0 && !isMcpToolsLoading.value) {
+    loadMcpTools();
+  }
+}
+
+function openRagTagsPanel() {
+  isRagPanelOpen.value = true;
+  if (ragTags.value.length === 0 && !isRagTagsLoading.value) {
+    loadRagTags();
   }
 }
 </script>

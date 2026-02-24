@@ -2,6 +2,7 @@ export interface ChatRequest {
   prompt: string;
   model: string;
   chat_session_id?: number | null;
+  rag_tags: string[] | null;
 }
 
 export interface ChatResponse {
@@ -64,3 +65,27 @@ export interface ApiResponse<T = unknown> {
   data: T;
   status_code: number;
 }
+
+export interface McpInputSchemaPreview {
+  fields: string[];
+  required: string[];
+  has_schema: boolean;
+}
+
+export interface McpTool {
+  id: string;
+  tool_name: string;
+  mcp_name: string;
+  description: string;
+  category: string;
+  available: boolean;
+  recent_score: number;
+  input_schema: Record<string, unknown>;
+  input_schema_preview: McpInputSchemaPreview;
+}
+
+
+
+export type McpToolsApiResponse = ApiResponse<McpTool[]>;
+
+export type RagTagsApiResponse = ApiResponse<string[]>;
