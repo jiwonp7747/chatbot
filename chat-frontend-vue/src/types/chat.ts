@@ -7,8 +7,19 @@ export interface ChatRequest {
 
 export interface ChatResponse {
   content: string;
-  status: 'progress' | 'streaming' | 'done' | 'error';
+  status: 'progress' | 'streaming' | 'done' | 'error' | 'confirm';
   error: string | null;
+  // HITL 필드 (confirm 시에만 사용)
+  thread_id?: string;
+  tool_name?: string;
+  tool_args?: Record<string, unknown>;
+}
+
+export interface ResumeRequest {
+  thread_id: string;
+  approved: boolean;
+  chat_session_id?: number | null;
+  model?: string;
 }
 
 export interface Message {
@@ -88,4 +99,13 @@ export interface McpTool {
 
 export type McpToolsApiResponse = ApiResponse<McpTool[]>;
 
-export type RagTagsApiResponse = ApiResponse<string[]>;
+export interface TagTreeNode {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  level: number;
+  file_count: number;
+  children: TagTreeNode[];
+}
+
+export type RagTagsApiResponse = ApiResponse<TagTreeNode[]>;

@@ -7,6 +7,7 @@ class StreamStatus(str, Enum):
     STREAMING = "streaming"     # 실제 AI 응답 chunk
     DONE = "done"              # 완료
     ERROR = "error"            # 에러
+    CONFIRM = "confirm"        # HITL 도구 실행 확인 대기
 
 class ChatRequest(BaseModel):
     chat_session_id: Optional[int]
@@ -18,4 +19,15 @@ class ChatResponse(BaseModel):
     content: str
     status: StreamStatus
     error: Optional[str] = None
+    # HITL 필드 (CONFIRM 시에만 사용)
+    thread_id: Optional[str] = None
+    tool_name: Optional[str] = None
+    tool_args: Optional[dict] = None
+
+class ResumeRequest(BaseModel):
+    """HITL 재개 요청"""
+    thread_id: str
+    approved: bool
+    chat_session_id: Optional[int] = None
+    model: Optional[str] = None
 

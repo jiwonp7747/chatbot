@@ -17,10 +17,10 @@ logger = logging.getLogger("chat-server")
 RAG_AGENT_PROMPT = """당신은 문서 검색 전문가입니다.
 사용자의 질문에 관련된 문서를 정확하게 찾아 핵심 내용을 정리하세요.
 
-도구 사용 가이드:
-- 태그가 지정된 경우 → tag_search_tool 사용
-- 태그 없이 일반 검색 → semantic_search_tool 사용
-- 필요하면 두 도구를 순서대로 사용하여 더 정확한 결과를 얻으세요.
+도구 사용 규칙 (반드시 준수):
+- 태그가 지정된 경우 → tag_search_tool만 사용
+- 태그 없이 일반 검색 → semantic_search_tool만 사용
+- 한 번의 요청에 도구를 1개만 호출하세요. 두 도구를 동시에 사용하지 마세요.
 
 검색 결과를 그대로 나열하지 말고, 사용자 질문에 맞게 요약하여 답변하세요.
 """
@@ -60,6 +60,8 @@ class RagAgent(BaseAgent):
             result = await agent.ainvoke({
                 "messages": [HumanMessage(content=prompt)]
             })
+            logger.debug(f"rag agent 실행결과 디버깅: {result}")
+
             return self.extract_ai_content(result)
 
         return search_documents

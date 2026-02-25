@@ -13,7 +13,7 @@
       :message="message"
     />
     <ChatMessage
-      v-if="isStreaming && streamingContent"
+      v-if="isStreaming && streamingContent && !store.pendingConfirm"
       :message="{
         id: 'streaming',
         role: 'assistant',
@@ -21,6 +21,18 @@
         timestamp: Date.now()
       }"
     />
+    <!-- HITL 도구 실행 확인 카드 -->
+    <div v-if="store.pendingConfirm" class="confirm-card">
+      <div class="confirm-icon">&#128270;</div>
+      <div class="confirm-title">'{{ store.pendingConfirm.toolName }}' 실행 확인</div>
+      <div class="confirm-args" v-if="Object.keys(store.pendingConfirm.toolArgs).length">
+        <pre>{{ JSON.stringify(store.pendingConfirm.toolArgs, null, 2) }}</pre>
+      </div>
+      <div class="confirm-actions">
+        <button class="btn-approve" @click="store.approveToolCall()">승인</button>
+        <button class="btn-reject" @click="store.rejectToolCall()">거부</button>
+      </div>
+    </div>
     <div ref="messagesEndRef" />
   </div>
 </template>
@@ -29,7 +41,10 @@
 import { ref, watch, nextTick, onMounted } from 'vue';
 import ChatMessage from '../components/ChatMessage.vue';
 import ModelSelector from '../components/ModelSelector.vue';
+import { useChatStore } from '../stores/chatStore';
 import type { ChatSession, ModelType } from '../types/chat';
+
+const store = useChatStore();
 
 const props = defineProps<{
   session: ChatSession;
@@ -92,5 +107,79 @@ watch(
   flex: 1;
   overflow-y: auto;
   padding: 24px 0;
+}
+
+.confirm-card {
+  max-width: 480px;
+  margin: 16px auto;
+  padding: 20px 24px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  text-align: center;
+}
+
+.confirm-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.confirm-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-0);
+  margin-bottom: 12px;
+}
+
+.confirm-args {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  text-align: left;
+  overflow-x: auto;
+}
+
+.confirm-args pre {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-approve,
+.btn-reject {
+  padding: 8px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-approve {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-reject {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+  border: 1px solid var(--glass-border);
+}
+
+.btn-approve:hover,
+.btn-reject:hover {
+  opacity: 0.85;
 }
 </style>

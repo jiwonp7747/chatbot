@@ -17,7 +17,7 @@ from config.logger import setup_logging
 from db.database import AsyncSessionLocal, engine  # DB 엔진 및 세션
 from db.model_type_migration import ensure_model_type_schema
 from mcp_hub import get_mcp_registry
-from config.langfuse import init_langfuse_tracing
+from config.telemetry import init_telemetry
 
 
 # --- [Lifespan] 서버 시작/종료 시 실행될 로직 ---
@@ -44,8 +44,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️ MCP Registry 초기화 실패 (서버는 계속 동작): {e}")
 
-    # Langfuse OTEL 트레이싱 초기화
-    init_langfuse_tracing()
+    # OTEL 트레이싱 초기화
+    init_telemetry()
 
     print("✨ 서버 준비 완료")
     yield  # -------------------- [애플리케이션 가동 중] --------------------

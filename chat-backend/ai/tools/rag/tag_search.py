@@ -5,6 +5,9 @@ Agent Memory 서버의 tag-scoped search API를 LangChain Tool로 래핑합니�
 """
 import httpx
 from langchain_core.tools import tool
+from opentelemetry.propagate import inject
+
+from config.telemetry import trace_tool
 
 MEMORY_SERVER_URL = "http://localhost:6333"
 
@@ -19,35 +22,41 @@ async def tag_search_tool(query: str, tags: list[str], n_results: int = 5) -> st
         n_results: 최대 결과 수
     """
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{MEMORY_SERVER_URL}/api/search/tag-scoped",
-                json={
-                    "query": query,
-                    "tags": tags,
-                    "n_results": n_results,
-                    "tag_operation": "OR",
-                    "include_descendants": True,
-                    "similarity_threshold": 0.3,
-                },
-            )
-            response.raise_for_status()
+        with trace_tool("rag.tag_search", {"search.query": query, "search.tags": str(tags)}):
+            headers = {"Content-Type": "application/json"}
+            inject(headers)
 
-        result = response.json()
-        if not result.get("success"):
-            return f"검색 실패: {result.get('message', 'unknown error')}"
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{MEMORY_SERVER_URL}/api/search/tag-scoped",
+                    headers=headers,
+                    json={
+                        "query": query,
+                        "tags": tags,
+                        "n_results": n_results,
+                        "tag_operation": "OR",
+                        "include_descendants": True,
+                        "similarity_threshold": 0.3,
+                    },
+                )
+                response.raise_for_status()
 
-        results = result.get("data", {}).get("results", [])
-        if not results:
-            return "검색 결과가 없습니다."
+            result = response.json()
+            if not result.get("success"):
+                return f"검색 실패: {result.get('message', 'unknown error')}"
 
-        formatted = []
-        for idx, item in enumerate(results, 1):
-            content = item.get("content", "").strip()[:500]
-            similarity = item.get("similarity", 0.0)
-            formatted.append(f"[{idx}] (유사도: {similarity:.2f})\n{content}")
+            results = result.get("data", {}).get("results", [])
+            if not results:
+                return "검색 결과가 없습니다."
 
-        return "\n\n".join(formatted)
+            formatted = []
+            for idx, item in enumerate(results, 1):
+                memory = item.get("memory", {})
+                content = memory.get("content", "").strip()[:500]
+                score = item.get("similarity_score", 0.0)
+                formatted.append(f"[{idx}] (유사도: {score:.2f})\n{content}")
+
+            return "\n\n".join(formatted)
 
     except Exception as e:
         return f"검색 중 오류 발생: {str(e)}"

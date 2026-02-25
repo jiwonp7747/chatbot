@@ -3,14 +3,21 @@ import { ChatSession, Message, ModelType, ChatResponse } from '../types/chat';
 import { chatService } from '../services/chatService';
 import { storage } from '../utils/storage';
 
+interface PendingConfirm {
+  threadId: string;
+  toolName: string;
+  toolArgs: Record<string, unknown>;
+}
+
 interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
   selectedModel: ModelType;
   streamingSessionId: string | null;
   streamingContentMap: Record<string, string>;
-  streamingStatusMap: Record<string, 'progress' | 'streaming'>;
+  streamingStatusMap: Record<string, 'progress' | 'streaming' | 'confirm'>;
   selectedRagTags: string[];
+  pendingConfirm: PendingConfirm | null;
 }
 
 export const useChatStore = defineStore('chat', {
@@ -21,7 +28,8 @@ export const useChatStore = defineStore('chat', {
     streamingSessionId: null,
     streamingContentMap: {},
     streamingStatusMap: {},
-    selectedRagTags: []
+    selectedRagTags: [],
+    pendingConfirm: null,
   }),
 
   getters: {
@@ -192,6 +200,14 @@ export const useChatStore = defineStore('chat', {
             delete this.streamingContentMap[sessionId];
             delete this.streamingStatusMap[sessionId];
             this.streamingSessionId = null;
+          } else if (response.status === 'confirm') {
+            this.streamingStatusMap[sessionId] = 'confirm';
+            this.streamingContentMap[sessionId] = response.content;
+            this.pendingConfirm = {
+              threadId: response.thread_id!,
+              toolName: response.tool_name!,
+              toolArgs: response.tool_args || {},
+            };
           } else if (response.status === 'error') {
             const errorMessage: Message = {
               id: (Date.now() + 1).toString(),
@@ -241,7 +257,10 @@ export const useChatStore = defineStore('chat', {
           this.streamingSessionId = null;
         },
         () => {
-          this.streamingSessionId = null;
+          // HITL confirm 대기 중이면 streamingSessionId 유지
+          if (!this.pendingConfirm) {
+            this.streamingSessionId = null;
+          }
         }
       );
     },
@@ -282,6 +301,135 @@ export const useChatStore = defineStore('chat', {
       };
       this.sessions[idx] = updatedSession;
       storage.saveSession(updatedSession);
+    },
+
+    _handleResumeResponse(sessionId: string, response: ChatResponse) {
+      if (response.status === 'progress') {
+        this.streamingStatusMap[sessionId] = 'progress';
+        this.streamingContentMap[sessionId] = response.content;
+      } else if (response.status === 'streaming') {
+        const previousStatus = this.streamingStatusMap[sessionId];
+        const isTransitionFromProgress = previousStatus === 'progress';
+
+        this.streamingStatusMap[sessionId] = 'streaming';
+
+        if (isTransitionFromProgress) {
+          this.streamingContentMap[sessionId] = response.content;
+        } else {
+          this.streamingContentMap[sessionId] = (this.streamingContentMap[sessionId] || '') + response.content;
+        }
+      } else if (response.status === 'confirm') {
+        this.streamingStatusMap[sessionId] = 'confirm';
+        this.streamingContentMap[sessionId] = response.content;
+        this.pendingConfirm = {
+          threadId: response.thread_id!,
+          toolName: response.tool_name!,
+          toolArgs: response.tool_args || {},
+        };
+      } else if (response.status === 'done') {
+        const currentContent = this.streamingContentMap[sessionId] || '';
+        const fullContent = currentContent + response.content;
+
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: fullContent,
+          timestamp: Date.now()
+        };
+
+        const idx = this.sessions.findIndex(s => s.id === sessionId);
+        if (idx !== -1) {
+          const updated = {
+            ...this.sessions[idx],
+            messages: [...this.sessions[idx].messages, assistantMessage],
+            updatedAt: Date.now()
+          };
+          this.sessions[idx] = updated;
+          storage.saveSession(updated);
+        }
+
+        delete this.streamingContentMap[sessionId];
+        delete this.streamingStatusMap[sessionId];
+        this.streamingSessionId = null;
+      } else if (response.status === 'error') {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `오류: ${response.error || '알 수 없는 오류가 발생했습니다'}`,
+          timestamp: Date.now()
+        };
+
+        const idx = this.sessions.findIndex(s => s.id === sessionId);
+        if (idx !== -1) {
+          const updated = {
+            ...this.sessions[idx],
+            messages: [...this.sessions[idx].messages, errorMessage],
+            updatedAt: Date.now()
+          };
+          this.sessions[idx] = updated;
+          storage.saveSession(updated);
+        }
+
+        delete this.streamingContentMap[sessionId];
+        delete this.streamingStatusMap[sessionId];
+        this.streamingSessionId = null;
+      }
+    },
+
+    approveToolCall() {
+      if (!this.pendingConfirm || !this.streamingSessionId) return;
+      const { threadId } = this.pendingConfirm;
+      const sessionId = this.streamingSessionId;
+      this.pendingConfirm = null;
+      this.streamingContentMap[sessionId] = '';
+      this.streamingStatusMap[sessionId] = 'progress';
+
+      const modelToUse = this.sessions.find(s => s.id === sessionId)?.model || this.selectedModel;
+
+      chatService.resumeChat(
+        {
+          thread_id: threadId,
+          approved: true,
+          model: modelToUse,
+          chat_session_id: parseInt(sessionId) || null,
+        },
+        (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
+        (error: Error) => {
+          console.error('Resume error:', error);
+          delete this.streamingContentMap[sessionId];
+          delete this.streamingStatusMap[sessionId];
+          this.streamingSessionId = null;
+        },
+        () => {}
+      );
+    },
+
+    rejectToolCall() {
+      if (!this.pendingConfirm || !this.streamingSessionId) return;
+      const { threadId } = this.pendingConfirm;
+      const sessionId = this.streamingSessionId;
+      this.pendingConfirm = null;
+      this.streamingContentMap[sessionId] = '';
+      this.streamingStatusMap[sessionId] = 'progress';
+
+      const modelToUse = this.sessions.find(s => s.id === sessionId)?.model || this.selectedModel;
+
+      chatService.resumeChat(
+        {
+          thread_id: threadId,
+          approved: false,
+          model: modelToUse,
+          chat_session_id: parseInt(sessionId) || null,
+        },
+        (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
+        (error: Error) => {
+          console.error('Resume error:', error);
+          delete this.streamingContentMap[sessionId];
+          delete this.streamingStatusMap[sessionId];
+          this.streamingSessionId = null;
+        },
+        () => {}
+      );
     },
   },
 });

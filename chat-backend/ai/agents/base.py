@@ -58,15 +58,33 @@ class BaseAgent(ABC):
         """서브에이전트를 메인 에이전트용 LangChain @tool로 래핑하여 반환"""
         ...
 
+    def get_middleware(self) -> list:
+        """오버라이드하여 미들웨어 추가 (예: HumanInTheLoopMiddleware)"""
+        return []
+
+    def get_checkpointer(self):
+        """오버라이드하여 체크포인터 추가 (예: InMemorySaver)"""
+        return None
+
     def build(self) -> CompiledStateGraph:
         """서브에이전트 그래프 생성 (캐싱)"""
         if self._graph is None:
             tools = self.get_tools()
-            self._graph = create_agent(
-                model=self.model,
-                tools=tools if tools else None,
-                system_prompt=self.get_system_prompt(),
-            )
+            kwargs = {
+                "model": self.model,
+                "tools": tools if tools else None,
+                "system_prompt": self.get_system_prompt(),
+            }
+
+            middleware = self.get_middleware()
+            if middleware:
+                kwargs["middleware"] = middleware
+
+            checkpointer = self.get_checkpointer()
+            if checkpointer:
+                kwargs["checkpointer"] = checkpointer
+
+            self._graph = create_agent(**kwargs)
             logger.info(
                 f"🔨 [{self.get_name()}] 서브에이전트 빌드 완료: "
                 f"도구 {len(tools) if tools else 0}개"
