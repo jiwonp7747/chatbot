@@ -193,6 +193,7 @@ class Orchestrator:
 
         with tracer.start_as_current_span("orchestrator.run") as span:
             span.set_attribute("thread.id", thread_id)
+            span.set_attribute("session.id", thread_id)
 
             try:
                 # 1. 대화 기록 로드
@@ -320,6 +321,7 @@ class Orchestrator:
 
         with tracer.start_as_current_span("orchestrator.resume") as span:
             span.set_attribute("thread.id", thread_id)
+            span.set_attribute("session.id", thread_id)
             span.set_attribute("hitl.approved", approved)
             span.set_attribute("model", model_string)
 

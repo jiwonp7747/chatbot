@@ -4,7 +4,7 @@
       <div class="rag-header">
         <div>
           <h3>RAG Tags</h3>
-          <p>검색에 사용할 태그를 선택하세요. 선택된 태그의 메모리에서 관련 정보를 검색합니다.</p>
+          <p>검색에 사용할 태그를 선택하세요. 상위 태그 선택 시 하위 태그도 함께 선택됩니다.</p>
         </div>
         <button class="icon-btn" type="button" @click="emit('close')">✕</button>
       </div>
@@ -18,22 +18,19 @@
         <div v-else-if="tags.length === 0" class="state">사용 가능한 태그가 없습니다.</div>
         <template v-else>
           <div class="tag-actions">
-            <span class="tag-count">{{ selectedTags.length }}개 선택됨</span>
-            <button v-if="selectedTags.length > 0" class="clear-btn" type="button" @click="clearAll">
+            <span class="tag-count">{{ store.selectedRagTags.length }}개 선택됨</span>
+            <button v-if="store.selectedRagTags.length > 0" class="clear-btn" type="button" @click="clearAll">
               전체 해제
             </button>
           </div>
-          <div class="tag-grid">
-            <button
-              v-for="tag in tags"
-              :key="tag"
-              class="tag-chip"
-              :class="{ selected: isSelected(tag) }"
-              type="button"
-              @click="toggleTag(tag)"
-            >
-              {{ tag }}
-            </button>
+          <div class="tag-tree">
+            <TagTreeItem
+              v-for="node in tags"
+              :key="node.id"
+              :node="node"
+              :selected-tags="store.selectedRagTags"
+              @toggle="toggleTagWithChildren"
+            />
           </div>
         </template>
       </div>
@@ -42,12 +39,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useChatStore } from '../stores/chatStore';
+import type { TagTreeNode } from '../types/chat';
+import TagTreeItem from './TagTreeItem.vue';
 
-const props = defineProps<{
+defineProps<{
   open: boolean;
-  tags: string[];
+  tags: TagTreeNode[];
   loading: boolean;
   error: string | null;
 }>();
@@ -59,18 +57,25 @@ const emit = defineEmits<{
 
 const store = useChatStore();
 
-const selectedTags = computed(() => store.selectedRagTags);
-
-function isSelected(tag: string): boolean {
-  return selectedTags.value.includes(tag);
+function collectDescendantNames(node: TagTreeNode): string[] {
+  const names: string[] = [];
+  for (const child of node.children ?? []) {
+    names.push(child.name);
+    names.push(...collectDescendantNames(child));
+  }
+  return names;
 }
 
-function toggleTag(tag: string) {
-  const index = store.selectedRagTags.indexOf(tag);
-  if (index > -1) {
-    store.selectedRagTags.splice(index, 1);
+function toggleTagWithChildren(node: TagTreeNode) {
+  const isSelected = store.selectedRagTags.includes(node.name);
+
+  if (isSelected) {
+    const toRemove = new Set([node.name, ...collectDescendantNames(node)]);
+    store.selectedRagTags = store.selectedRagTags.filter(t => !toRemove.has(t));
   } else {
-    store.selectedRagTags.push(tag);
+    const allNames = [node.name, ...collectDescendantNames(node)];
+    const toAdd = allNames.filter(n => !store.selectedRagTags.includes(n));
+    store.selectedRagTags.push(...toAdd);
   }
 }
 
@@ -91,8 +96,8 @@ function clearAll() {
 }
 
 .rag-panel {
-  width: min(560px, calc(100vw - 40px));
-  max-height: min(600px, calc(100vh - 40px));
+  width: min(520px, calc(100vw - 40px));
+  max-height: min(640px, calc(100vh - 40px));
   background: #0b1220;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 14px;
@@ -165,33 +170,9 @@ function clearAll() {
   border-color: rgba(148, 163, 184, 0.4);
 }
 
-.tag-grid {
+.tag-tree {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tag-chip {
-  padding: 6px 14px;
-  background: rgba(15, 23, 42, 0.6);
-  color: #cbd5e1;
-  font-size: 13px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-weight: 500;
-}
-
-.tag-chip:hover {
-  background: rgba(30, 41, 59, 0.8);
-  border-color: rgba(148, 163, 184, 0.4);
-}
-
-.tag-chip.selected {
-  background: rgba(129, 140, 248, 0.2);
-  color: #a5b4fc;
-  border-color: rgba(129, 140, 248, 0.5);
+  flex-direction: column;
 }
 
 .state {

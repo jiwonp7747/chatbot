@@ -98,6 +98,10 @@ export class ChatService {
                   this.closeConnection();
                   onComplete();
                   return;
+                } else if (data.status === 'confirm') {
+                  // HITL: 확인 대기 — 스트림 정상 종료 (에러 아님)
+                  onComplete();
+                  return;
                 }
               }
             } catch (error) {
@@ -184,6 +188,10 @@ export class ChatService {
                   return;
                 } else if (data.status === 'error') {
                   this.closeConnection();
+                  onComplete();
+                  return;
+                } else if (data.status === 'confirm') {
+                  // HITL 연쇄 확인 — 스트림 정상 종료
                   onComplete();
                   return;
                 }

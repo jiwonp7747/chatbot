@@ -69,7 +69,7 @@ import ChatPage from './pages/ChatPage.vue';
 import McpToolsPanel from './components/McpToolsPanel.vue';
 import RagTagsPanel from './components/RagTagsPanel.vue';
 import { chatService } from './services/chatService';
-import type { McpTool } from './types/chat';
+import type { McpTool, TagTreeNode } from './types/chat';
 
 const store = useChatStore();
 const isMcpPanelOpen = ref(false);
@@ -80,7 +80,7 @@ const mcpTools = ref<McpTool[]>([]);
 const isRagPanelOpen = ref(false);
 const isRagTagsLoading = ref(false);
 const ragTagsError = ref<string | null>(null);
-const ragTags = ref<string[]>([]);
+const ragTags = ref<TagTreeNode[]>([]);
 
 onMounted(() => {
   store.loadSessions();

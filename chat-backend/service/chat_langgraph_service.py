@@ -31,6 +31,10 @@ from .model_resolver import resolve_model_config
 
 logger = logging.getLogger("chat-server")
 
+# HITL 대기 중인 원본 요청 정보 (thread_id → {request, user_chat_created_at})
+# interrupt 후 resume 시 DB 저장에 사용
+_hitl_pending_requests: dict[str, dict] = {}
+
 
 async def process_chat_with_langgraph(
     request: ChatRequest,
@@ -150,6 +154,11 @@ async def process_chat_with_langgraph(
 
         # HITL CONFIRM 전송 후에는 여기서 종료 (resume 대기)
         if confirm_sent:
+            # 원본 요청 정보 보관 → resume 시 DB 저장에 사용
+            _hitl_pending_requests[stream_id] = {
+                "request": request,
+                "user_chat_created_at": user_chat_created_at,
+            }
             logger.info(f"⏸️ HITL confirm 전송 완료, resume 대기: {stream_id}")
             return
 
@@ -224,6 +233,37 @@ async def process_resume(
     사용자가 도구 실행을 승인/거부한 후 그래프를 재개합니다.
     """
     stream_id = getattr(http_request.state, 'stream_id', None)
+
+    # HITL 보관된 원본 요청 정보 꺼내기
+    pending = _hitl_pending_requests.pop(resume_request.thread_id, None)
+    if not pending:
+        logger.warning(f"⚠️ HITL 원본 요청 정보 없음: {resume_request.thread_id}")
+
+    # save_callback 등록 (middleware cleanup에서 호출)
+    if stream_id and pending:
+        original_request = pending["request"]
+        user_chat_created_at = pending["user_chat_created_at"]
+
+        async def save_callback():
+            stream_data = get_stream_data(stream_id)
+            if not stream_data:
+                return
+            collected_content = stream_data.get("collected_content", "")
+            if collected_content:
+                async for new_db in get_db():
+                    try:
+                        await save_chat_to_db(
+                            original_request, collected_content,
+                            user_chat_created_at, new_db,
+                        )
+                    except Exception as e:
+                        logger.error(f"❌ HITL resume DB 저장 실패: {e}")
+                    finally:
+                        await new_db.close()
+                    break
+
+        register_stream(stream_id, save_callback)
+        set_user_chat_time(stream_id, user_chat_created_at)
 
     try:
         resolved_model = await resolve_model_config(db, resume_request.model)
