@@ -41,7 +41,10 @@ async def seed_models():
                 ('GPT-5.1 Mini', 'gpt-5.1-mini', 'OPENAI', 'gpt-5.1-mini', TRUE, '균형형 기본 모델'),
                 ('GPT-5 Nano', 'gpt-5-nano', 'OPENAI', 'gpt-5-nano', TRUE, '빠르고 효율적인 경량 모델'),
                 ('GPT-4.1', 'gpt-4.1', 'OPENAI', 'gpt-4.1', TRUE, '강력한 추론 능력 모델'),
-                ('Gemini Pro', 'gemini-pro', 'GEMINI', 'gemini-pro', FALSE, 'Google 모델 (구현 전)'),
+                ('Gemini Pro', 'gemini-pro', 'GEMINI', 'gemini-pro', FALSE, 'Google 모델 (레거시)'),
+                ('Gemini 2.5 Pro', 'gemini-2.5-pro', 'GEMINI', 'gemini-2.5-pro', TRUE, 'Google 최강 추론 모델'),
+                ('Gemini 2.5 Flash', 'gemini-2.5-flash', 'GEMINI', 'gemini-2.5-flash', TRUE, 'Google 빠른 추론 모델'),
+                ('Gemini 2.0 Flash', 'gemini-2.0-flash', 'GEMINI', 'gemini-2.0-flash', TRUE, 'Google 경량 범용 모델'),
                 ('OCI Llama 3.3 70B', 'oci-llama-3.3-70b', 'OCI', COALESCE(NULLIF(:oci_model_id, ''), 'meta.llama-3.3-70b-instruct'), TRUE, 'OCI Llama 모델'),
                 ('Local Llama3.1', 'local-llama3.1', 'LOCAL', 'llama3.1:8b', FALSE, '로컬 모델 (구현 전)')
             ON CONFLICT (model_type) DO UPDATE SET

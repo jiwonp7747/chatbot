@@ -133,10 +133,16 @@ class Orchestrator:
             system_prompt=MAIN_AGENT_PROMPT,
         )
 
+    # 내부 provider → LangChain init_chat_model prefix
+    _LANGCHAIN_PROVIDER_MAP = {
+        "gemini": "google_genai",
+    }
+
     @staticmethod
     def _resolve_model_string(state: ChatGraphState) -> str:
         """상태에서 create_agent용 모델 문자열 생성"""
         provider = state.get("provider", "openai").lower()
+        provider = Orchestrator._LANGCHAIN_PROVIDER_MAP.get(provider, provider)
         api_model = state.get("api_model", "gpt-4o-mini")
         return f"{provider}:{api_model}"
 
@@ -193,7 +199,6 @@ class Orchestrator:
 
         with tracer.start_as_current_span("orchestrator.run") as span:
             span.set_attribute("thread.id", thread_id)
-            span.set_attribute("session.id", thread_id)
 
             try:
                 # 1. 대화 기록 로드
@@ -321,7 +326,6 @@ class Orchestrator:
 
         with tracer.start_as_current_span("orchestrator.resume") as span:
             span.set_attribute("thread.id", thread_id)
-            span.set_attribute("session.id", thread_id)
             span.set_attribute("hitl.approved", approved)
             span.set_attribute("model", model_string)
 

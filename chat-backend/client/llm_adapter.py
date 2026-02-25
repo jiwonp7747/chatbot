@@ -135,6 +135,36 @@ class OpenAIAdapter(LLMAdapter):
 
 
 class GeminiAdapter(LLMAdapter):
+    def __init__(self, api_key: Optional[str] = None) -> None:
+        self._api_key = api_key
+        self._client = None
+        self._types = None
+
+    def _get_client(self):
+        if self._client is not None:
+            return self._client
+        from google import genai
+        from google.genai import types
+        self._types = types
+        self._client = genai.Client(api_key=self._api_key or os.getenv("GOOGLE_API_KEY"))
+        return self._client
+
+    @staticmethod
+    def _build_contents(messages: List[Dict[str, str]]):
+        """OpenAI messages → Gemini contents + system_instruction 분리"""
+        contents = []
+        system_parts = []
+        for m in messages:
+            role = (m.get("role") or "").lower()
+            text = m.get("content") or ""
+            if role == "system":
+                system_parts.append(text)
+            elif role == "assistant":
+                contents.append({"role": "model", "parts": [{"text": text}]})
+            else:
+                contents.append({"role": "user", "parts": [{"text": text}]})
+        return system_parts, contents
+
     async def create_completion(
         self,
         *,
@@ -142,7 +172,20 @@ class GeminiAdapter(LLMAdapter):
         messages: List[Dict[str, str]],
         response_format: Optional[Dict[str, Any]] = None,
     ) -> Any:
-        raise NotImplementedError("Gemini adapter is not implemented yet.")
+        client = self._get_client()
+        system_parts, contents = self._build_contents(messages)
+        config = self._types.GenerateContentConfig(
+            system_instruction="\n".join(system_parts) if system_parts else None,
+        )
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=model,
+            contents=contents,
+            config=config,
+        )
+        return _CompatResponse(
+            choices=[_CompatChoice(message=_CompatMessage(content=response.text))]
+        )
 
     async def stream_completion(
         self,
@@ -150,7 +193,18 @@ class GeminiAdapter(LLMAdapter):
         model: str,
         messages: List[Dict[str, str]],
     ) -> Any:
-        raise NotImplementedError("Gemini adapter is not implemented yet.")
+        client = self._get_client()
+        system_parts, contents = self._build_contents(messages)
+        config = self._types.GenerateContentConfig(
+            system_instruction="\n".join(system_parts) if system_parts else None,
+        )
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=model,
+            contents=contents,
+            config=config,
+        )
+        return _CompatStream(content=response.text)
 
 
 class OCIAdapter(LLMAdapter):
@@ -434,6 +488,7 @@ def _normalize_provider(provider: Optional[str]) -> Optional[LLMProvider]:
         "anthropic": LLMProvider.OPENAI,  # 현재 Anthropic 구현체 미지원, OpenAI로 fallback
         "gemini": LLMProvider.GEMINI,
         "google": LLMProvider.GEMINI,
+        "google_genai": LLMProvider.GEMINI,
         "oci": LLMProvider.OCI,
         "oracle": LLMProvider.OCI,
         "local": LLMProvider.LOCAL,

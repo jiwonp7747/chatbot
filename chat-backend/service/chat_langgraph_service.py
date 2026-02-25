@@ -267,7 +267,9 @@ async def process_resume(
 
     try:
         resolved_model = await resolve_model_config(db, resume_request.model)
-        model_string = f"{resolved_model.provider.lower()}:{resolved_model.api_model}"
+        provider = resolved_model.provider.lower()
+        provider = Orchestrator._LANGCHAIN_PROVIDER_MAP.get(provider, provider)
+        model_string = f"{provider}:{resolved_model.api_model}"
 
         orchestrator = Orchestrator(db)
 
