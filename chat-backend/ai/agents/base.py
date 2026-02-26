@@ -92,12 +92,27 @@ class BaseAgent(ABC):
         return self._graph
 
     @staticmethod
+    def _content_to_str(content) -> str:
+        """content가 list일 경우 텍스트만 추출하여 str로 변환"""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, str):
+                    parts.append(part)
+                elif isinstance(part, dict) and part.get("type") == "text":
+                    parts.append(part.get("text", ""))
+            return "".join(parts)
+        return str(content) if content else ""
+
+    @staticmethod
     def extract_ai_content(result: dict) -> str:
         """에이전트 실행 결과에서 마지막 AI 응답 content 추출"""
         messages = result.get("messages", [])
         for msg in reversed(messages):
             if isinstance(msg, AIMessage) and msg.content:
-                return msg.content
+                return BaseAgent._content_to_str(msg.content)
         if messages and hasattr(messages[-1], "content"):
-            return messages[-1].content
+            return BaseAgent._content_to_str(messages[-1].content)
         return ""

@@ -10,6 +10,7 @@ get_tracer() / trace_tool()로 수동 span 생성도 지원합니다.
     OTEL_COLLECTOR_BASE_URL: OTEL Collector 엔드포인트 (예: http://host:30318)
 """
 import os
+import json
 import logging
 from contextlib import contextmanager
 
@@ -21,6 +22,47 @@ _initialized = False
 OTEL_ENABLED = os.getenv("OTEL_ENABLED", "false").lower() in ("true", "1", "yes")
 OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "chat-backend")
 OTEL_COLLECTOR_BASE_URL = os.getenv("OTEL_COLLECTOR_BASE_URL", "")
+
+
+class _UnicodeDecodeSpanProcessor:
+    """traceloop이 생성하는 span attribute의 유니코드 이스케이프를 한글로 디코딩.
+
+    LangchainInstrumentor가 json.dumps(ensure_ascii=True)로 직렬화하여
+    한글이 \\uXXXX 형태로 저장되는 문제를 export 전에 수정합니다.
+    """
+
+    def __init__(self, delegate):
+        self._delegate = delegate
+
+    def on_start(self, span, parent_context=None):
+        self._delegate.on_start(span, parent_context)
+
+    def on_end(self, span):
+        self._decode_attrs(span)
+        self._delegate.on_end(span)
+
+    def shutdown(self):
+        self._delegate.shutdown()
+
+    def force_flush(self, timeout_millis=30000):
+        return self._delegate.force_flush(timeout_millis)
+
+    @staticmethod
+    def _decode_attrs(span):
+        attrs = getattr(span, "_attributes", None)
+        if not attrs:
+            return
+        for key in list(attrs.keys()):
+            val = attrs.get(key)
+            if not isinstance(val, str) or "\\u" not in val:
+                continue
+            try:
+                parsed = json.loads(val)
+                decoded = json.dumps(parsed, ensure_ascii=False)
+                if decoded != val:
+                    attrs[key] = decoded
+            except Exception:
+                pass
 
 
 def init_telemetry() -> bool:
@@ -49,7 +91,8 @@ def init_telemetry() -> bool:
         exporter = OTLPSpanExporter(
             endpoint=f"{OTEL_COLLECTOR_BASE_URL}/v1/traces"
         )
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+        batch_processor = BatchSpanProcessor(exporter)
+        provider.add_span_processor(_UnicodeDecodeSpanProcessor(batch_processor))
         trace.set_tracer_provider(provider)
 
         # LangChain/LangGraph 자동 계측

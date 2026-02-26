@@ -277,6 +277,7 @@ async def process_resume(
             thread_id=resume_request.thread_id,
             approved=resume_request.approved,
             model_string=model_string,
+            chat_session_id=resume_request.chat_session_id,
         ):
             if progress_message:
                 yield progress_message
