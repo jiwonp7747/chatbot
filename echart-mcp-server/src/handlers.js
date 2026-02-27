@@ -2,6 +2,8 @@ import axios from 'axios';
 import { createYieldChart } from "./chart-engine.js";
 import { withSpan } from './tracing.js';
 
+const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:8481';
+
 /** 1. 차트 생성 핸들러 */
 const handleGenerateYieldChart = async ({ type, data }) => {
     return withSpan('tool.generate_yield_chart', null, {
@@ -36,7 +38,7 @@ const handleFetchYieldHistory = async (args) => {
         try {
             console.log(`[MCP] History 조회 요청, Params:`, searchParams);
             const response = await axios.post(
-                'http://localhost:8481/seed/api/yield/history',
+                `${BACKEND_API_URL}/seed/api/yield/history`,
                 searchParams,
                 { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
             );
@@ -69,7 +71,7 @@ const handleDetailLookup = async (type, id, token) => {
         try {
             console.log(`[MCP] ${type} 상세 조회 요청: ID=${id}`);
             const response = await axios.get(
-                `http://localhost:8481/seed/api/yield/${endpoint}/${id}`,
+                `${BACKEND_API_URL}/seed/api/yield/${endpoint}/${id}`,
                 { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
             );
             return {

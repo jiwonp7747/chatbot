@@ -1,3 +1,5 @@
 .idea/
 echart-mcp-server.iml
 node_modules/
+.env
+.env.local
