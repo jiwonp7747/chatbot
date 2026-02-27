@@ -13,7 +13,7 @@ from typing import Optional
 import httpx
 from langchain_core.tools import tool
 
-FAB_TRACE_API_URL = os.getenv("FAB_TRACE_API_URL", "http://35.216.28.235:31441")
+FAB_TRACE_API_URL = os.getenv("FAB_TRACE_API_URL", "http://localhost:8080")
 
 
 def _format_response(result: dict, max_rows: int = 20) -> str:
