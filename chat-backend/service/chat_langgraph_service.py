@@ -5,28 +5,21 @@ LangGraph 기반 채팅 서비스
 Subagents 패턴 오케스트레이터: graph/orchestrator.py
 """
 import logging
+import uuid
 from datetime import datetime
 from typing import AsyncGenerator
 
 from starlette.requests import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
 from ai.graph.schema.stream import ChatRequest, ChatResponse, StreamStatus, ResumeRequest
 from ai.graph.schema.graph_state import ChatGraphState
 from ai.graph.orchestrator import Orchestrator
 from ai.graph.nodes import stream_response_node
 from util.sse_formatter import SSEFormatter
-from middleware.stream_tracker import (
-    register_stream,
-    set_user_chat_time,
-    get_stream_data,
-    update_stream_content,
-)
-from db.database import get_db
 
-from .chat_service import save_chat_to_db  # 기존 DB 저장 로직 재사용
+from .chat_service import save_user_message_to_db, save_ai_message_to_db
 from .model_resolver import resolve_model_config
 
 logger = logging.getLogger("chat-server")
@@ -52,11 +45,7 @@ async def process_chat_with_langgraph(
     Yields:
         SSE 형식의 응답 청크
     """
-    # 스트림 ID 가져오기
-    stream_id = getattr(http_request.state, 'stream_id', None)
-    if not stream_id:
-        logger.error("❌ stream_id가 없습니다!")
-        raise RuntimeError("stream_id not found in request.state")
+    stream_id = str(uuid.uuid4())
 
     auth_header = http_request.headers.get("authorization")
     logger.info("auth_header: %s", auth_header)
@@ -72,35 +61,8 @@ async def process_chat_with_langgraph(
 
     user_chat_created_at = datetime.utcnow()
 
-    # DB 저장 콜백 함수 정의
-    async def save_callback():
-        """Middleware cleanup에서 호출될 DB 저장 함수"""
-        stream_data = get_stream_data(stream_id)
-        if not stream_data:
-            logger.warning(f"⚠️ Stream data 없음: {stream_id}")
-            return
-
-        collected_content = stream_data.get("collected_content", "")
-        user_time = stream_data.get("user_chat_created_at")
-
-        if collected_content:
-            logger.info(f"💾 Callback 저장 시작: {stream_id}, length: {len(collected_content)}")
-
-            # 새로운 독립적인 DB 세션 생성
-            async for new_db in get_db():
-                try:
-                    await save_chat_to_db(request, collected_content, user_time, new_db)
-                except ApiException as api_exception:
-                    logger.error(f"❌ Callback DB 저장 실패: {api_exception.message}")
-                except Exception as e:
-                    logger.error(f"❌ Callback DB 저장 실패: {stream_id}, {e}")
-                finally:
-                    await new_db.close()
-                break
-
-    # 스트림 등록
-    register_stream(stream_id, save_callback)
-    set_user_chat_time(stream_id, user_chat_created_at)
+    # 사용자 메시지 즉시 저장
+    await save_user_message_to_db(request.chat_session_id, request.prompt, user_chat_created_at)
 
     try:
         resolved_model = await resolve_model_config(db, request.model)
@@ -194,14 +156,14 @@ async def process_chat_with_langgraph(
                     return
 
                 chunk = ai_response[i:i + chunk_size]
-                if stream_id:
-                    update_stream_content(stream_id, chunk)
-
                 response = ChatResponse(
                     content=chunk,
                     status=StreamStatus.STREAMING,
                 )
                 yield SSEFormatter.format(response)
+
+            # AI 응답 저장
+            await save_ai_message_to_db(request.chat_session_id, ai_response, request.prompt)
 
             # 완료
             done_response = ChatResponse(content="", status=StreamStatus.DONE)
@@ -209,8 +171,15 @@ async def process_chat_with_langgraph(
             logger.info(f"✅ 스트리밍 정상 완료: {stream_id}")
         else:
             # fallback: 기존 방식 (stream_response_node가 LLM 직접 호출)
-            async for chunk in stream_response_node(final_state, http_request):
-                yield chunk
+            content_parts = []
+            async for chunk_str in stream_response_node(final_state, http_request, content_parts):
+                yield chunk_str
+            if content_parts:
+                await save_ai_message_to_db(
+                    request.chat_session_id,
+                    "".join(content_parts),
+                    request.prompt
+                )
 
     except Exception as e:
         logger.error(f"❌ LangGraph 처리 에러: {stream_id}, {e}")
@@ -232,38 +201,12 @@ async def process_resume(
 
     사용자가 도구 실행을 승인/거부한 후 그래프를 재개합니다.
     """
-    stream_id = getattr(http_request.state, 'stream_id', None)
+    stream_id = str(uuid.uuid4())
 
     # HITL 보관된 원본 요청 정보 꺼내기
     pending = _hitl_pending_requests.pop(resume_request.thread_id, None)
     if not pending:
         logger.warning(f"⚠️ HITL 원본 요청 정보 없음: {resume_request.thread_id}")
-
-    # save_callback 등록 (middleware cleanup에서 호출)
-    if stream_id and pending:
-        original_request = pending["request"]
-        user_chat_created_at = pending["user_chat_created_at"]
-
-        async def save_callback():
-            stream_data = get_stream_data(stream_id)
-            if not stream_data:
-                return
-            collected_content = stream_data.get("collected_content", "")
-            if collected_content:
-                async for new_db in get_db():
-                    try:
-                        await save_chat_to_db(
-                            original_request, collected_content,
-                            user_chat_created_at, new_db,
-                        )
-                    except Exception as e:
-                        logger.error(f"❌ HITL resume DB 저장 실패: {e}")
-                    finally:
-                        await new_db.close()
-                    break
-
-        register_stream(stream_id, save_callback)
-        set_user_chat_time(stream_id, user_chat_created_at)
 
     try:
         resolved_model = await resolve_model_config(db, resume_request.model)
@@ -293,14 +236,19 @@ async def process_resume(
                             return
 
                         chunk = ai_response[i:i + chunk_size]
-                        if stream_id:
-                            update_stream_content(stream_id, chunk)
-
                         response = ChatResponse(
                             content=chunk,
                             status=StreamStatus.STREAMING,
                         )
                         yield SSEFormatter.format(response)
+
+                    # AI 응답 저장
+                    if pending:
+                        await save_ai_message_to_db(
+                            resume_request.chat_session_id,
+                            ai_response,
+                            pending["request"].prompt if pending else "",
+                        )
 
         done_response = ChatResponse(content="", status=StreamStatus.DONE)
         yield SSEFormatter.format(done_response)

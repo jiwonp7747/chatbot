@@ -69,6 +69,9 @@ class FabTraceAgent(BaseAgent):
     def get_description(self) -> str:
         return "팹 설비 트레이스 데이터를 분석하여 불량 원인을 추적합니다"
 
+    def get_progress_label(self) -> str:
+        return "🔍 팹 설비 분석 에이전트가 작업 중입니다..."
+
     def get_system_prompt(self) -> str:
         return FAB_TRACE_AGENT_PROMPT
 

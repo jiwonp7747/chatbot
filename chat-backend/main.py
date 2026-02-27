@@ -10,7 +10,6 @@ from config import middleware
 from config.prompt import load_system_prompts
 from config.swagger import setup_swagger
 from middleware.logging import LoggingMiddleware
-from middleware.stream_tracker import StreamTrackerMiddleware
 from router import router as api_router
 from common.exceptionhandler import register_exception_handler
 from config.logger import setup_logging
@@ -69,7 +68,6 @@ app = setup_swagger(app, title="chat-server", version="0.0.1", description="chat
 
 # middleware
 middleware.set_cors_config(app)
-app.add_middleware(StreamTrackerMiddleware)  # 스트림 추적
 app.add_middleware(LoggingMiddleware)  # 로깅
 
 # router

@@ -9,6 +9,13 @@ interface PendingConfirm {
   toolArgs: Record<string, unknown>;
 }
 
+interface SubProgressEntry {
+  content: string;
+  tools: string[];
+  parallel: boolean;
+  agent: string;
+}
+
 interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
@@ -18,6 +25,7 @@ interface ChatState {
   streamingStatusMap: Record<string, 'progress' | 'streaming' | 'confirm'>;
   selectedRagTags: string[];
   pendingConfirm: PendingConfirm | null;
+  subProgressMap: Record<number, SubProgressEntry[]>;
 }
 
 export const useChatStore = defineStore('chat', {
@@ -30,6 +38,7 @@ export const useChatStore = defineStore('chat', {
     streamingStatusMap: {},
     selectedRagTags: [],
     pendingConfirm: null,
+    subProgressMap: {},
   }),
 
   getters: {
@@ -164,11 +173,28 @@ export const useChatStore = defineStore('chat', {
           if (response.status === 'progress') {
             this.streamingStatusMap[sessionId] = 'progress';
             this.streamingContentMap[sessionId] = response.content;
+          } else if (response.status === 'sub_progress') {
+            const numericId = parseInt(sessionId);
+            if (!this.subProgressMap[numericId]) {
+              this.subProgressMap[numericId] = [];
+            }
+            this.subProgressMap[numericId].push({
+              content: response.content,
+              tools: response.sub_tools || [],
+              parallel: response.parallel || false,
+              agent: response.agent_name || '',
+            });
           } else if (response.status === 'streaming') {
             const previousStatus = this.streamingStatusMap[sessionId];
             const isTransitionFromProgress = previousStatus === 'progress';
 
             this.streamingStatusMap[sessionId] = 'streaming';
+
+            // Clear sub_progress on first streaming chunk
+            const numericId = parseInt(sessionId);
+            if (isTransitionFromProgress && this.subProgressMap[numericId]) {
+              delete this.subProgressMap[numericId];
+            }
 
             if (isTransitionFromProgress) {
               this.streamingContentMap[sessionId] = response.content;
@@ -199,6 +225,7 @@ export const useChatStore = defineStore('chat', {
 
             delete this.streamingContentMap[sessionId];
             delete this.streamingStatusMap[sessionId];
+            delete this.subProgressMap[parseInt(sessionId)];
             this.streamingSessionId = null;
           } else if (response.status === 'confirm') {
             this.streamingStatusMap[sessionId] = 'confirm';
@@ -229,6 +256,7 @@ export const useChatStore = defineStore('chat', {
 
             delete this.streamingContentMap[sessionId];
             delete this.streamingStatusMap[sessionId];
+            delete this.subProgressMap[parseInt(sessionId)];
             this.streamingSessionId = null;
           }
         },
@@ -254,6 +282,7 @@ export const useChatStore = defineStore('chat', {
 
           delete this.streamingContentMap[sessionId];
           delete this.streamingStatusMap[sessionId];
+          delete this.subProgressMap[parseInt(sessionId)];
           this.streamingSessionId = null;
         },
         () => {
@@ -307,11 +336,28 @@ export const useChatStore = defineStore('chat', {
       if (response.status === 'progress') {
         this.streamingStatusMap[sessionId] = 'progress';
         this.streamingContentMap[sessionId] = response.content;
+      } else if (response.status === 'sub_progress') {
+        const numericId = parseInt(sessionId);
+        if (!this.subProgressMap[numericId]) {
+          this.subProgressMap[numericId] = [];
+        }
+        this.subProgressMap[numericId].push({
+          content: response.content,
+          tools: response.sub_tools || [],
+          parallel: response.parallel || false,
+          agent: response.agent_name || '',
+        });
       } else if (response.status === 'streaming') {
         const previousStatus = this.streamingStatusMap[sessionId];
         const isTransitionFromProgress = previousStatus === 'progress';
 
         this.streamingStatusMap[sessionId] = 'streaming';
+
+        // Clear sub_progress on first streaming chunk
+        const numericId = parseInt(sessionId);
+        if (isTransitionFromProgress && this.subProgressMap[numericId]) {
+          delete this.subProgressMap[numericId];
+        }
 
         if (isTransitionFromProgress) {
           this.streamingContentMap[sessionId] = response.content;
@@ -350,6 +396,7 @@ export const useChatStore = defineStore('chat', {
 
         delete this.streamingContentMap[sessionId];
         delete this.streamingStatusMap[sessionId];
+        delete this.subProgressMap[parseInt(sessionId)];
         this.streamingSessionId = null;
       } else if (response.status === 'error') {
         const errorMessage: Message = {
@@ -372,6 +419,7 @@ export const useChatStore = defineStore('chat', {
 
         delete this.streamingContentMap[sessionId];
         delete this.streamingStatusMap[sessionId];
+        delete this.subProgressMap[parseInt(sessionId)];
         this.streamingSessionId = null;
       }
     },

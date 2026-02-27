@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
@@ -10,92 +11,107 @@ from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
 from config.prompt import SYSTEM_PROMPT
 from db.models import ChatSession, ChatMessage, ModelType
-from db.database import get_db
 from ai.graph.schema.stream import ChatRequest, ChatResponse, StreamStatus
 from util.sse_formatter import SSEFormatter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import desc, asc
-from middleware.stream_tracker import (
-    register_stream,
-    update_stream_content,
-    set_user_chat_time,
-    get_stream_data
-)
 from service.model_resolver import resolve_model_config
 
 logger = logging.getLogger("chat-server")
 
 
-# 💾 DB 저장 로직 분리
-async def save_chat_to_db(
-        request: ChatRequest,
-        collected_content: str,
-        user_chat_created_at: datetime,
-        db: AsyncSession
-):
-    if not request.chat_session_id:
-        raise ApiException(FailureCode.BAD_REQUEST, "non chat session value")
 
-    if not collected_content or not request.prompt:
-        logger.info("no data to save db")
+async def save_user_message_to_db(
+    chat_session_id: int,
+    prompt: str,
+    created_at: datetime,
+):
+    """사용자 메시지를 DB에 즉시 저장 (독립 세션 사용)"""
+    if not chat_session_id or not prompt:
         return
 
-    logger.info(f"💾 DB 저장 시작 (content length: {len(collected_content)})")
-    ai_chat_created_at = datetime.utcnow()
-
-    try:
-        # 세션 처리
-        session_query = select(ChatSession).where(
-            ChatSession.chat_session_id == request.chat_session_id
-        )
-        session_result = await db.execute(session_query)
-        chat_session = session_result.scalar_one_or_none()
-
-        if not chat_session:
-            title = await create_chat_title(
-                user_prompt=request.prompt,
-                ai_response=collected_content
+    from db.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        try:
+            # 세션 확인/생성
+            session_query = select(ChatSession).where(
+                ChatSession.chat_session_id == chat_session_id
             )
+            session_result = await db.execute(session_query)
+            chat_session = session_result.scalar_one_or_none()
 
-            new_session = ChatSession(
-                chat_session_id=request.chat_session_id,
-                session_title=title or "새 채팅"
-            )
-            db.add(new_session)
-            await db.commit()
-            await db.refresh(new_session)
-            chat_session = new_session
+            if not chat_session:
+                new_session = ChatSession(
+                    chat_session_id=chat_session_id,
+                    session_title=prompt[:15] or "새 채팅"
+                )
+                db.add(new_session)
+                await db.commit()
+                await db.refresh(new_session)
+                chat_session = new_session
 
-        if chat_session:
-            # 메시지 저장
+            # 사용자 메시지 저장
             user_message = ChatMessage(
                 role="user",
-                content=request.prompt,
+                content=prompt,
                 chat_session_id=chat_session.chat_session_id,
-                created_at=user_chat_created_at,
+                created_at=created_at,
             )
+            db.add(user_message)
+            await db.commit()
+            logger.info(f"✅ 사용자 메시지 저장 완료: session={chat_session_id}")
+        except Exception as e:
+            logger.error(f"❌ 사용자 메시지 저장 실패: {e}")
+            await db.rollback()
 
+
+async def save_ai_message_to_db(
+    chat_session_id: int,
+    content: str,
+    user_prompt: str,
+):
+    """AI 응답 메시지를 DB에 즉시 저장 + 타이틀 업데이트 (독립 세션 사용)"""
+    if not chat_session_id or not content:
+        return
+
+    from db.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        try:
+            session_query = select(ChatSession).where(
+                ChatSession.chat_session_id == chat_session_id
+            )
+            session_result = await db.execute(session_query)
+            chat_session = session_result.scalar_one_or_none()
+
+            if not chat_session:
+                logger.warning(f"⚠️ 세션을 찾을 수 없음: {chat_session_id}")
+                return
+
+            # AI 메시지 저장
             ai_message = ChatMessage(
                 role="system",
-                content=collected_content,
+                content=content,
                 chat_session_id=chat_session.chat_session_id,
-                created_at=ai_chat_created_at,
+                created_at=datetime.utcnow(),
             )
-
+            db.add(ai_message)
             chat_session.updated_at = datetime.utcnow()
 
-            db.add(user_message)
-            db.add(ai_message)
+            # 타이틀 업데이트 (임시 타이틀인 경우 = 15자 이하)
+            if len(chat_session.session_title) <= 15:
+                try:
+                    title = await create_chat_title(user_prompt, content)
+                    if title:
+                        chat_session.session_title = title
+                except Exception as title_err:
+                    logger.error(f"⚠️ 타이틀 생성 실패: {title_err}")
+
             await db.commit()
-
-            logger.info(f"✅ 메시지 저장 완료")
-        else:
-            logger.warning("⚠️ 세션을 찾을 수 없음")
-
-    except Exception as db_error:
-        logger.error(f"❌ DB 저장 실패: {db_error}")
-        await db.rollback()
+            logger.info(f"✅ AI 메시지 저장 완료: session={chat_session_id}")
+        except Exception as e:
+            logger.error(f"❌ AI 메시지 저장 실패: {e}")
+            await db.rollback()
 
 
 # streaming chat service
@@ -105,46 +121,13 @@ async def process_chat_request(
         http_request: Request,
 )->AsyncGenerator[str, None]:
     message_history = None
-    # 🎫 Middleware가 설정한 stream_id 가져오기
-    stream_id = getattr(http_request.state, 'stream_id', None)
-    if not stream_id:
-        logger.error("❌ stream_id가 없습니다!")
-        raise RuntimeError("stream_id not found in request.state")
+    stream_id = str(uuid.uuid4())
 
     user_chat_created_at = datetime.utcnow()
     stream = None
 
-    # 💾 DB 저장 콜백 함수 정의
-    async def save_callback():
-        """Middleware cleanup에서 호출될 DB 저장 함수"""
-        stream_data = get_stream_data(stream_id)
-        if not stream_data:
-            logger.warning(f"⚠️ Stream data 없음: {stream_id}")
-            return
-
-        collected_content = stream_data.get("collected_content", "")
-        user_time = stream_data.get("user_chat_created_at")
-
-        if collected_content:
-            logger.info(f"💾 Callback 저장 시작: {stream_id}, length: {len(collected_content)}")
-
-            # ✅ 새로운 독립적인 DB 세션 생성
-            async for new_db in get_db():
-                try:
-                    await save_chat_to_db(request, collected_content, user_time, new_db)
-                except ApiException as api_exception:
-                    logger.error(f"❌ Callback DB 저장 실패: {api_exception}")
-                except Exception as e:
-                    logger.error(f"❌ Callback DB 저장 실패: {stream_id}, {e}")
-                finally:
-                    await new_db.close()
-                break  # async generator는 한 번만 실행
-        else:
-            logger.info(f"ℹ️ 저장할 content 없음: {stream_id}")
-
-    # 📝 스트림 등록
-    register_stream(stream_id, save_callback)
-    set_user_chat_time(stream_id, user_chat_created_at)
+    # 사용자 메시지 즉시 저장
+    await save_user_message_to_db(request.chat_session_id, request.prompt, user_chat_created_at)
 
     try:
         query = select(ChatMessage).where(ChatMessage.chat_session_id == request.chat_session_id).order_by(asc(ChatMessage.created_at)).limit(10)
@@ -193,53 +176,42 @@ async def process_chat_request(
         )
 
         # 응답을 청크 단위로 스트리밍
+        collected_content = ""
         async for chunk in stream:
-            # 🔍 연결 끊김 감지
             if await http_request.is_disconnected():
                 logger.info(f"🔌 클라이언트 연결 끊김 감지: {stream_id}")
-                # ⚡ OpenAI 스트림 즉시 중단 (토큰 비용 절감)
                 await stream.aclose()
-                logger.info(f"⚡ OpenAI 스트림 중단됨: {stream_id}")
-                # 💾 DB 저장은 Middleware cleanup이 처리함
-                return  # generator 종료
+                # 중단 시에도 수집된 내용 저장
+                if collected_content:
+                    await save_ai_message_to_db(request.chat_session_id, collected_content, request.prompt)
+                return
 
-            # 델타(변화량) 추출
             content = chunk.choices[0].delta.content
 
             if content:
-                # 📊 전역 상태 업데이트
-                update_stream_content(stream_id, content)
-
-                # SSEFormatter 사용
+                collected_content += content
                 response = ChatResponse(
                     content=content,
                     status=StreamStatus.STREAMING
                 )
                 yield SSEFormatter.format(response)
 
-        # 🔄 스트리밍 정상 완료
+        # 정상 완료 - AI 응답 저장
+        if collected_content:
+            await save_ai_message_to_db(request.chat_session_id, collected_content, request.prompt)
+
         logger.info(f"✅ 스트리밍 정상 완료: {stream_id}")
-
-        # DONE 상태 전송
-        done_response = ChatResponse(
-            content="",
-            status=StreamStatus.DONE
-        )
+        done_response = ChatResponse(content="", status=StreamStatus.DONE)
         yield SSEFormatter.format(done_response)
-
-        # 💾 DB 저장은 Middleware cleanup이 처리함
 
     except Exception as e:
         logger.error(f"❌ 스트리밍 에러: {stream_id}, {e}")
-
         error_response = ChatResponse(
             content="",
             status=StreamStatus.ERROR,
             error=str(e)
         )
         yield SSEFormatter.format(error_response)
-
-        # 💾 DB 저장은 Middleware cleanup이 처리함 (에러 시에도)
 
 
 async def get_chat_sessions(

@@ -12,14 +12,14 @@ from client.llm_adapter import get_llm_adapter
 from ai.graph.schema.stream import ChatResponse, StreamStatus
 from ai.graph.schema.graph_state import ChatGraphState
 from util.sse_formatter import SSEFormatter
-from middleware.stream_tracker import update_stream_content
 
 logger = logging.getLogger("chat-server")
 
 
 async def stream_response_node(
     state: ChatGraphState,
-    http_request: Request
+    http_request: Request,
+    content_accumulator: list | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     OpenAI API를 호출하고 스트리밍 응답을 반환하는 노드
@@ -66,9 +66,8 @@ async def stream_response_node(
             content = chunk.choices[0].delta.content
 
             if content:
-                # 전역 상태 업데이트 (DB 저장용)
-                if stream_id:
-                    update_stream_content(stream_id, content)
+                if content_accumulator is not None:
+                    content_accumulator.append(content)
 
                 # SSE 형식으로 응답
                 response = ChatResponse(

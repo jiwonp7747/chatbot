@@ -7,12 +7,16 @@ export interface ChatRequest {
 
 export interface ChatResponse {
   content: string;
-  status: 'progress' | 'streaming' | 'done' | 'error' | 'confirm';
+  status: 'progress' | 'streaming' | 'done' | 'error' | 'confirm' | 'sub_progress';
   error: string | null;
   // HITL 필드 (confirm 시에만 사용)
   thread_id?: string;
   tool_name?: string;
   tool_args?: Record<string, unknown>;
+  // sub_progress 필드
+  agent_name?: string;
+  sub_tools?: string[];
+  parallel?: boolean;
 }
 
 export interface ResumeRequest {

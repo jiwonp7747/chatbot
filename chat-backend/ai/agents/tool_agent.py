@@ -33,6 +33,9 @@ class ToolAgent(BaseAgent):
     def get_description(self) -> str:
         return "차트 생성, 메모리 저장 등 MCP 도구를 실행합니다"
 
+    def get_progress_label(self) -> str:
+        return "⚡ 도구 실행 에이전트가 작업 중입니다..."
+
     def get_system_prompt(self) -> str:
         return TOOL_AGENT_PROMPT
 

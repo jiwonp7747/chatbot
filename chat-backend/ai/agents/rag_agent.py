@@ -34,6 +34,9 @@ class RagAgent(BaseAgent):
     def get_description(self) -> str:
         return "업로드된 문서에서 정보를 검색하고 관련 내용을 찾습니다"
 
+    def get_progress_label(self) -> str:
+        return "📖 문서 검색 에이전트가 작업 중입니다..."
+
     def get_system_prompt(self) -> str:
         return RAG_AGENT_PROMPT
 

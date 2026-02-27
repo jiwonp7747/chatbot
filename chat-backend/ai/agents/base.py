@@ -11,6 +11,8 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
 from langgraph.graph.state import CompiledStateGraph
 
+from ai.agents.middleware import SubProgressMiddleware
+
 logger = logging.getLogger("chat-server")
 
 
@@ -58,9 +60,13 @@ class BaseAgent(ABC):
         """서브에이전트를 메인 에이전트용 LangChain @tool로 래핑하여 반환"""
         ...
 
+    def get_progress_label(self) -> str:
+        """오케스트레이터에서 표시할 진행 메시지. 오버라이드 가능."""
+        return f"⚡ {self.get_name()} 실행 중..."
+
     def get_middleware(self) -> list:
-        """오버라이드하여 미들웨어 추가 (예: HumanInTheLoopMiddleware)"""
-        return []
+        """기본: SubProgressMiddleware 포함. 오버라이드하여 추가 미들웨어 가능."""
+        return [SubProgressMiddleware(agent_name=self.get_name())]
 
     def get_checkpointer(self):
         """오버라이드하여 체크포인터 추가 (예: InMemorySaver)"""

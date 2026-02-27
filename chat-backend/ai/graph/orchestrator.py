@@ -14,7 +14,9 @@
     ├── execute_tools    → ToolAgent (MCP 도구들)
     └── 직접 응답 (도구 불필요시)
 """
+import asyncio
 import logging
+import time
 from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +31,7 @@ from opentelemetry.trace import StatusCode
 
 from ai.agents import RagAgent, ToolAgent, FabTraceAgent
 from ai.agents.base import BaseAgent
+from ai.graph.progress import set_progress_queue
 from ai.graph.schema.graph_state import ChatGraphState
 from ai.graph.schema.stream import ChatResponse, StreamStatus
 from ai.graph.nodes import load_chat_history_node
@@ -39,8 +42,20 @@ logger = logging.getLogger("chat-server")
 
 # 모듈 싱글턴: 모든 thread의 체크포인트를 공유
 _checkpointer = InMemorySaver()
-# 모델별 에이전트 캐시 (매 요청마다 재빌드 방지)
-_agent_cache: dict[str, object] = {}
+# 모델별 에이전트 캐시 (매 요청마다 재빌드 방지) — (agent, created_at) 튜플
+_agent_cache: dict[str, tuple[object, float]] = {}
+_CACHE_TTL = 3600  # 1시간
+
+
+def invalidate_agent_cache(model_string: str | None = None):
+    """에이전트 캐시 무효화. model_string이 None이면 전체 초기화."""
+    if model_string:
+        _agent_cache.pop(model_string, None)
+    else:
+        _agent_cache.clear()
+    logger.info(f"🔄 에이전트 캐시 무효화: {model_string or '전체'}")
+
+
 # HITL interrupt 시 도구 이름 보관 (thread_id → tool_name)
 _interrupted_tools: dict[str, str] = {}
 
@@ -65,20 +80,15 @@ MAIN_AGENT_PROMPT = """당신은 AI 어시스턴트 오케스트레이터입니�
 전문가의 결과를 바탕으로 사용자에게 자연스러운 최종 답변을 제공하세요.
 """
 
-# 도구 이름 → 진행 메시지 매핑
-_TOOL_PROGRESS_LABELS = {
-    "search_documents": "📖 문서 검색 에이전트가 작업 중입니다...",
-    "execute_tools": "⚡ 도구 실행 에이전트가 작업 중입니다...",
-    "analyze_fab_trace": "🔍 팹 설비 분석 에이전트가 작업 중입니다...",
-}
-
-
 class Orchestrator:
     """Subagents 패턴 오케스트레이터
 
     각 서브에이전트는 agents/ 패키지에서 build() + as_tool()로 정의됩니다.
     오케스트레이터는 as_tool()로 받은 도구를 메인 에이전트에 전달할 뿐입니다.
     """
+
+    # 도구 이름 → 진행 메시지 (서브에이전트 빌드 시 자동 수집)
+    _tool_progress_labels: dict[str, str] = {}
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -99,29 +109,40 @@ class Orchestrator:
         return self._mcp_tools
 
     async def _get_or_build_agent(self, model_string: str):
-        """에이전트 캐시에서 가져오거나 새로 빌드"""
+        """에이전트 캐시에서 가져오거나 새로 빌드 (TTL 기반 만료)"""
         if model_string in _agent_cache:
-            return _agent_cache[model_string]
+            agent, created_at = _agent_cache[model_string]
+            if time.time() - created_at < _CACHE_TTL:
+                return agent
+            logger.info(f"🔄 캐시 만료: {model_string}")
 
         agent = await self._build_main_agent(model_string)
-        _agent_cache[model_string] = agent
+        _agent_cache[model_string] = (agent, time.time())
         return agent
 
     async def _build_main_agent(self, model_string: str):
         """서브에이전트 도구를 수집하고 메인 에이전트 생성"""
         mcp_tools = await self._load_mcp_tools()
 
-        # 서브에이전트 → 도구로 변환
+        # 서브에이전트 인스턴스 수집
+        sub_agents: list[BaseAgent] = []
+
         rag = RagAgent(model=model_string)
-        subagent_tools = [rag.as_tool()]
+        sub_agents.append(rag)
 
         if mcp_tools:
             tool_ag = ToolAgent(model=model_string, mcp_tools=mcp_tools)
-            subagent_tools.append(tool_ag.as_tool())
+            sub_agents.append(tool_ag)
 
-        # Fab Trace 설비 분석 에이전트
         fab_trace = FabTraceAgent(model=model_string)
-        subagent_tools.append(fab_trace.as_tool())
+        sub_agents.append(fab_trace)
+
+        # 서브에이전트 → 도구로 변환 + 진행 라벨 자동 수집
+        subagent_tools = []
+        for sa in sub_agents:
+            t = sa.as_tool()
+            subagent_tools.append(t)
+            Orchestrator._tool_progress_labels[t.name] = sa.get_progress_label()
 
         logger.info(f"🤖 서브에이전트 도구 {len(subagent_tools)}개 구성 완료")
 
@@ -194,6 +215,133 @@ class Orchestrator:
             return BaseAgent._content_to_str(messages[-1].content)
         return ""
 
+    async def _stream_with_progress(
+        self,
+        agent,
+        input_data,
+        config: dict,
+        thread_id: str,
+        span,
+    ) -> AsyncGenerator[tuple[Optional[str], Optional[str]], None]:
+        """Queue 기반 스트리밍 (sub_progress 포함)
+
+        run_until_stream과 resume_stream의 공통 queue 소비 루프.
+
+        Yields:
+            (sse_message, None)  — progress / sub_progress / confirm 이벤트
+            (None, ai_response)  — 완료 시 최종 응답
+        """
+        merged_queue: asyncio.Queue = asyncio.Queue()
+        set_progress_queue(merged_queue)
+
+        async def _run():
+            try:
+                async for chunk in agent.astream(
+                    input_data,
+                    config=config,
+                    stream_mode="updates",
+                ):
+                    await merged_queue.put(("chunk", chunk))
+            except Exception as e:
+                await merged_queue.put(("error", e))
+            finally:
+                await merged_queue.put(("done", None))
+
+        task = asyncio.create_task(_run())
+        ai_response = ""
+
+        try:
+            while True:
+                event_type, data = await merged_queue.get()
+
+                if event_type == "done":
+                    break
+
+                if event_type == "error":
+                    raise data
+
+                if event_type == "sub_progress":
+                    info = data
+                    if info["status"] == "calling":
+                        tool_list = ", ".join(info["tools"])
+                        prefix = "🔄" if info["parallel"] else "🔧"
+                        label = f"{prefix} {tool_list} 호출 중..."
+                    else:
+                        label = f"✅ {info['tools'][0]} 완료"
+
+                    sub_response = ChatResponse(
+                        content=label,
+                        status=StreamStatus.SUB_PROGRESS,
+                        agent_name=info["agent_name"],
+                        sub_tools=info["tools"],
+                        parallel=info["parallel"],
+                    )
+                    yield (SSEFormatter.format(sub_response), None)
+                    continue
+
+                # event_type == "chunk"
+                chunk = data
+
+                # interrupt 감지
+                if "__interrupt__" in chunk:
+                    interrupt = chunk["__interrupt__"][0]
+                    action_requests = interrupt.value.get("action_requests", [])
+                    if action_requests:
+                        first_action = action_requests[0]
+                        tool_name = first_action.get("name", "unknown")
+                        tool_args = first_action.get("args", {})
+                    else:
+                        tool_name = "unknown"
+                        tool_args = {}
+
+                    confirm = ChatResponse(
+                        content=f"'{tool_name}' 도구를 실행하시겠습니까?",
+                        status=StreamStatus.CONFIRM,
+                        thread_id=thread_id,
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                    )
+                    span.set_attribute("hitl.interrupted", True)
+                    span.set_attribute("hitl.tool_name", tool_name)
+                    span.set_status(StatusCode.OK, "HITL interrupt")
+                    _interrupted_tools[thread_id] = tool_name
+                    yield (SSEFormatter.format(confirm), None)
+                    logger.info(f"⏸️ HITL interrupt: tool={tool_name}, thread={thread_id}")
+                    return
+
+                # 일반 노드 실행 결과 처리
+                for key, value in chunk.items():
+                    if key == "model":
+                        msgs = value.get("messages", [])
+                        for msg in msgs:
+                            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    tc_name = tc.get("name", "unknown")
+                                    label = Orchestrator._tool_progress_labels.get(
+                                        tc_name, f"⚡ {tc_name} 실행 중..."
+                                    )
+                                    progress = ChatResponse(
+                                        content=label,
+                                        status=StreamStatus.PROGRESS,
+                                    )
+                                    yield (SSEFormatter.format(progress), None)
+
+                            if isinstance(msg, AIMessage) and msg.content and not getattr(msg, "tool_calls", None):
+                                ai_response = BaseAgent._content_to_str(msg.content)
+
+                    elif key == "tools":
+                        msgs = value.get("messages", [])
+                        for msg in msgs:
+                            if hasattr(msg, "name"):
+                                logger.info(f"✅ 서브에이전트 완료: {msg.name}")
+
+        finally:
+            set_progress_queue(None)
+            if not task.done():
+                task.cancel()
+
+        yield (None, ai_response)
+
     async def run_until_stream(
         self, initial_state: ChatGraphState, thread_id: str
     ) -> AsyncGenerator[tuple[Optional[str], Optional[ChatGraphState]], None]:
@@ -243,74 +391,24 @@ class Orchestrator:
                 )
                 yield (SSEFormatter.format(progress), None)
 
-                # 4. astream(stream_mode="updates")로 진행 상황 캡처
-                ai_response = ""
+                # 4. Queue 기반 스트리밍 (공통 메서드 위임)
                 config = {
                     "configurable": {"thread_id": thread_id},
                     "recursion_limit": 25,
                 }
+                ai_response = None  # None = 미완료(interrupt), str = 완료
 
-                async for chunk in main_agent.astream(
-                    {"messages": messages},
-                    config=config,
-                    stream_mode="updates",
+                async for sse_msg, result in self._stream_with_progress(
+                    main_agent, {"messages": messages}, config, thread_id, span,
                 ):
-                    # interrupt 감지 — Interrupt 객체: .value (dict), .id (str)
-                    if "__interrupt__" in chunk:
-                        interrupt = chunk["__interrupt__"][0]
-                        action_requests = interrupt.value.get("action_requests", [])
-                        if action_requests:
-                            first_action = action_requests[0]
-                            tool_name = first_action.get("name", "unknown")
-                            tool_args = first_action.get("args", {})
-                        else:
-                            tool_name = "unknown"
-                            tool_args = {}
+                    if sse_msg is not None:
+                        yield (sse_msg, None)
+                    if result is not None:
+                        ai_response = result
 
-                        confirm = ChatResponse(
-                            content=f"'{tool_name}' 도구를 실행하시겠습니까?",
-                            status=StreamStatus.CONFIRM,
-                            thread_id=thread_id,
-                            tool_name=tool_name,
-                            tool_args=tool_args,
-                        )
-                        # OTEL: interrupt는 에러가 아닌 정상 흐름
-                        span.set_attribute("hitl.interrupted", True)
-                        span.set_attribute("hitl.tool_name", tool_name)
-                        span.set_status(StatusCode.OK, "HITL interrupt")
-                        _interrupted_tools[thread_id] = tool_name
-                        yield (SSEFormatter.format(confirm), None)
-                        logger.info(f"⏸️ HITL interrupt: tool={tool_name}, thread={thread_id}")
-                        return  # SSE 스트림 종료, 프론트에서 resume 대기
-
-                    # 일반 노드 실행 결과 처리
-                    for key, value in chunk.items():
-                        if key == "model":
-                            msgs = value.get("messages", [])
-                            for msg in msgs:
-                                # 도구 호출 의도 감지 → progress 전송
-                                if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                    for tc in msg.tool_calls:
-                                        tc_name = tc.get("name", "unknown")
-                                        label = _TOOL_PROGRESS_LABELS.get(
-                                            tc_name, f"⚡ {tc_name} 실행 중..."
-                                        )
-                                        progress = ChatResponse(
-                                            content=label,
-                                            status=StreamStatus.PROGRESS,
-                                        )
-                                        yield (SSEFormatter.format(progress), None)
-
-                                # 최종 AI 응답 캡처
-                                if isinstance(msg, AIMessage) and msg.content and not getattr(msg, "tool_calls", None):
-                                    ai_response = BaseAgent._content_to_str(msg.content)
-
-                        elif key == "tools":
-                            # 도구 실행 완료 로그
-                            msgs = value.get("messages", [])
-                            for msg in msgs:
-                                if hasattr(msg, "name"):
-                                    logger.info(f"✅ 서브에이전트 완료: {msg.name}")
+                # interrupt 시 _stream_with_progress가 result를 yield하지 않고 종료
+                if ai_response is None:
+                    return
 
                 # 5. 최종 상태
                 final_state = {**state, "ai_response": ai_response}
@@ -350,7 +448,7 @@ class Orchestrator:
                 # interrupt 시 저장해둔 도구 이름으로 진행 메시지 전송
                 interrupted_tool = _interrupted_tools.pop(thread_id, None)
                 if interrupted_tool and approved:
-                    label = _TOOL_PROGRESS_LABELS.get(
+                    label = Orchestrator._tool_progress_labels.get(
                         interrupted_tool, f"⚡ {interrupted_tool} 실행 중..."
                     )
                     progress = ChatResponse(
@@ -363,69 +461,25 @@ class Orchestrator:
                     resume_value = {"decisions": [{"type": "approve"}]}
                 else:
                     resume_value = {"decisions": [{"type": "reject", "message": "사용자가 도구 실행을 거부했습니다."}]}
+
                 config = {
                     "configurable": {"thread_id": thread_id},
                     "recursion_limit": 25,
                 }
 
-                ai_response = ""
+                ai_response = None  # None = 미완료(interrupt), str = 완료
 
-                async for chunk in main_agent.astream(
-                    Command(resume=resume_value),
-                    config=config,
-                    stream_mode="updates",
+                async for sse_msg, result in self._stream_with_progress(
+                    main_agent, Command(resume=resume_value), config, thread_id, span,
                 ):
-                    # 연쇄 interrupt (다른 도구 호출) 처리
-                    if "__interrupt__" in chunk:
-                        interrupt = chunk["__interrupt__"][0]
-                        action_requests = interrupt.value.get("action_requests", [])
-                        if action_requests:
-                            first_action = action_requests[0]
-                            tool_name = first_action.get("name", "unknown")
-                            tool_args = first_action.get("args", {})
-                        else:
-                            tool_name = "unknown"
-                            tool_args = {}
+                    if sse_msg is not None:
+                        yield (sse_msg, None)
+                    if result is not None:
+                        ai_response = result
 
-                        confirm = ChatResponse(
-                            content=f"'{tool_name}' 도구를 실행하시겠습니까?",
-                            status=StreamStatus.CONFIRM,
-                            thread_id=thread_id,
-                            tool_name=tool_name,
-                            tool_args=tool_args,
-                        )
-                        # OTEL: 연쇄 interrupt도 정상 흐름
-                        span.set_attribute("hitl.chained_interrupt", True)
-                        span.set_attribute("hitl.tool_name", tool_name)
-                        span.set_status(StatusCode.OK, "Chained HITL interrupt")
-                        yield (SSEFormatter.format(confirm), None)
-                        logger.info(f"⏸️ HITL 연쇄 interrupt: tool={tool_name}, thread={thread_id}")
-                        return
-
-                    for key, value in chunk.items():
-                        if key == "model":
-                            msgs = value.get("messages", [])
-                            for msg in msgs:
-                                if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                    for tc in msg.tool_calls:
-                                        tc_name = tc.get("name", "unknown")
-                                        label = _TOOL_PROGRESS_LABELS.get(
-                                            tc_name, f"⚡ {tc_name} 실행 중..."
-                                        )
-                                        progress = ChatResponse(
-                                            content=label,
-                                            status=StreamStatus.PROGRESS,
-                                        )
-                                        yield (SSEFormatter.format(progress), None)
-
-                                if isinstance(msg, AIMessage) and msg.content and not getattr(msg, "tool_calls", None):
-                                    ai_response = BaseAgent._content_to_str(msg.content)
-
-                        elif key == "tools":
-                            msgs = value.get("messages", [])
-                            for msg in msgs:
-                                if hasattr(msg, "name"):
-                                    logger.info(f"✅ 서브에이전트 완료: {msg.name}")
+                # interrupt 시 _stream_with_progress가 result를 yield하지 않고 종료
+                if ai_response is None:
+                    return
 
                 span.set_status(StatusCode.OK)
                 yield (None, {"ai_response": ai_response})
