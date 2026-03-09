@@ -1,22 +1,21 @@
-from typing import TypedDict, Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from langgraph.graph import MessagesState
 
-class ChatGraphState(TypedDict, total=False):
+
+class ChatGraphState(MessagesState, total=False):
     """LangGraph State 정의
 
-    각 노드에서 공유하는 상태 정보
+    MessagesState를 상속하여 messages 필드의 add_messages reducer를 활용합니다.
+    messages: Annotated[list[AnyMessage], add_messages] ← MessagesState에서 상속
     total=False: 모든 필드가 optional임을 명시
     """
     # 입력 데이터
-    chat_session_id: Optional[int]
     user_prompt: str
     model: str  # model key
     api_model: str
     provider: str
-
-    # 대화 기록
-    message_history: List[Dict[str, str]]  # [{"role": "user", "content": "..."}, ...]
 
     # 의도 분석 결과
     intent_analysis: Optional[Dict[str, Any]]  # {"intent": "question", "confidence": 0.9, ...}
@@ -28,9 +27,6 @@ class ChatGraphState(TypedDict, total=False):
     needs_more_tools: bool  # 추가 도구 호출 필요 여부
     iteration_count: int  # 반복 횟수 (무한 루프 방지)
 
-    # OpenAI 메시지 구성
-    messages: List[Dict[str, str]]
-
     # RAG 검색 관련
     rag_tags: List[str]  # tag-scoped search에 사용할 태그 목록
     rag_results: List[Dict[str, Any]]  # RAG 검색 결과
@@ -40,10 +36,8 @@ class ChatGraphState(TypedDict, total=False):
 
     # 메타데이터
     user_chat_created_at: datetime
-    stream_id: Optional[str]
+    thread_id: Optional[str]
 
     # 에러 처리
     error: Optional[str]
 
-    # 인증 데이터
-    token: str

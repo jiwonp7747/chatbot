@@ -1,7 +1,5 @@
-from .base import BaseAgent
-from .middleware import SubProgressMiddleware
-from .rag_agent import RagAgent
-from .tool_agent import ToolAgent
-from .fab_trace_agent import FabTraceAgent
+from .rag_agent import create_rag_subagent
+from .tool_agent import create_tool_subagent
+from .fab_trace_agent import create_fab_trace_subagent
 
-__all__ = ["BaseAgent", "SubProgressMiddleware", "RagAgent", "ToolAgent", "FabTraceAgent"]
+__all__ = ["create_rag_subagent", "create_tool_subagent", "create_fab_trace_subagent"]

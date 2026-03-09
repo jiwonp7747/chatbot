@@ -1,3 +1,4 @@
+import os
 import logging
 import uuid
 from datetime import datetime
@@ -20,6 +21,26 @@ from service.model_resolver import resolve_model_config
 
 logger = logging.getLogger("chat-server")
 
+async def create_chat_title(user_prompt: str) -> Optional[str]:
+    """사용자 프롬프트로 채팅 세션 제목 생성 (LLM 호출)"""
+    class ChatTitleResponse(BaseModel):
+        title: str
+    try:
+        llm_adapter = get_llm_adapter(provider="OPENAI")
+        model = os.getenv("CHAT_TITLE_MODEL", "gpt-4.1-nano")
+
+        completion = await llm_adapter.parse_completion(
+            model=model,
+            messages=[
+                {"role": "system", "content": "사용자의 질문을 바탕으로 이 채팅 세션의 주제를 15자 이내로 요약해서 제목을 지어주세요."},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_model=ChatTitleResponse,
+        )
+        return completion.choices[0].message.parsed.title
+    except Exception as e:
+        logger.error(f"❌ 제목 생성 실패: {e}")
+        return (user_prompt or "새 채팅")[:15]
 
 
 async def save_user_message_to_db(
@@ -27,9 +48,8 @@ async def save_user_message_to_db(
     prompt: str,
     created_at: datetime,
 ):
-    """사용자 메시지를 DB에 즉시 저장 (독립 세션 사용)"""
     if not chat_session_id or not prompt:
-        return
+        raise ApiException(FailureCode.INTERNAL_SERVER_ERROR, "user chat saving content is null")
 
     from db.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
@@ -42,9 +62,11 @@ async def save_user_message_to_db(
             chat_session = session_result.scalar_one_or_none()
 
             if not chat_session:
+                # 새 세션: LLM으로 제목 생성
+                title = await create_chat_title(prompt)
                 new_session = ChatSession(
                     chat_session_id=chat_session_id,
-                    session_title=prompt[:15] or "새 채팅"
+                    session_title=title or prompt[:15] or "새 채팅"
                 )
                 db.add(new_session)
                 await db.commit()
@@ -69,11 +91,9 @@ async def save_user_message_to_db(
 async def save_ai_message_to_db(
     chat_session_id: int,
     content: str,
-    user_prompt: str,
 ):
-    """AI 응답 메시지를 DB에 즉시 저장 + 타이틀 업데이트 (독립 세션 사용)"""
     if not chat_session_id or not content:
-        return
+        raise ApiException(FailureCode.INTERNAL_SERVER_ERROR, "ai chat saving content is null")
 
     from db.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
@@ -85,28 +105,16 @@ async def save_ai_message_to_db(
             chat_session = session_result.scalar_one_or_none()
 
             if not chat_session:
-                logger.warning(f"⚠️ 세션을 찾을 수 없음: {chat_session_id}")
-                return
+                raise ApiException(FailureCode.INTERNAL_SERVER_ERROR, f"세션을 찾을 수 없음: {chat_session_id}")
 
-            # AI 메시지 저장
             ai_message = ChatMessage(
-                role="system",
+                role="assistant",
                 content=content,
                 chat_session_id=chat_session.chat_session_id,
                 created_at=datetime.utcnow(),
             )
             db.add(ai_message)
             chat_session.updated_at = datetime.utcnow()
-
-            # 타이틀 업데이트 (임시 타이틀인 경우 = 15자 이하)
-            if len(chat_session.session_title) <= 15:
-                try:
-                    title = await create_chat_title(user_prompt, content)
-                    if title:
-                        chat_session.session_title = title
-                except Exception as title_err:
-                    logger.error(f"⚠️ 타이틀 생성 실패: {title_err}")
-
             await db.commit()
             logger.info(f"✅ AI 메시지 저장 완료: session={chat_session_id}")
         except Exception as e:
@@ -183,7 +191,7 @@ async def process_chat_request(
                 await stream.aclose()
                 # 중단 시에도 수집된 내용 저장
                 if collected_content:
-                    await save_ai_message_to_db(request.chat_session_id, collected_content, request.prompt)
+                    await save_ai_message_to_db(request.chat_session_id, collected_content)
                 return
 
             content = chunk.choices[0].delta.content
@@ -198,7 +206,7 @@ async def process_chat_request(
 
         # 정상 완료 - AI 응답 저장
         if collected_content:
-            await save_ai_message_to_db(request.chat_session_id, collected_content, request.prompt)
+            await save_ai_message_to_db(request.chat_session_id, collected_content)
 
         logger.info(f"✅ 스트리밍 정상 완료: {stream_id}")
         done_response = ChatResponse(content="", status=StreamStatus.DONE)
@@ -231,28 +239,6 @@ async def get_chat_messages(
     return result.scalars().all()
 
 
-async def create_chat_title(
-        user_prompt: str,
-        ai_response: str
-)->Optional[str]:
-    class ChatTitleResponse(BaseModel):
-        title: str
-    try:
-        llm_adapter = get_llm_adapter(provider="OPENAI")
-        completion = await llm_adapter.parse_completion(
-            model="gpt-4.1-nano",  # 싸고 빠른 모델 추천
-            messages=[
-                {"role": "system", "content": "사용자의 질문과 AI의 답변을 바탕으로 이 채팅 세션의 주제를 15자 이내로 요약해서 제목을 지어주세요."},
-                {"role": "user", "content": f"질문: {user_prompt}\n\n답변: {ai_response}"}
-            ],
-            response_model=ChatTitleResponse
-        )
-
-        return completion.choices[0].message.parsed.title
-
-    except Exception as e:
-        logger.error(f"❌ 제목 생성 실패: {e}")
-        return (user_prompt or "새 채팅")[:15]
 
 async def get_available_model_list(
         db: AsyncSession,
