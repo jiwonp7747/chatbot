@@ -21,8 +21,10 @@ class ChatMessage(Base):
     __tablename__ = "chat_message"
 
     chat_message_id = Column(BigInteger, primary_key=True, index=True)
-    role = Column(String)  # user / assistant / system
+    role = Column(String)  # user / assistant / tool
     content = Column(String)
+    tool_call_id = Column(String, nullable=True)   # ToolMessage용
+    tool_name = Column(String, nullable=True)       # ToolMessage용
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Foreign Key
@@ -51,3 +53,13 @@ class PromptTemplate(Base):
     is_active = Column(Boolean, nullable=True)
     priority = Column(Integer, nullable=True)
     content = Column(String, nullable=True)
+
+
+class LargeData(Base):
+    __tablename__ = "large_data"
+
+    id = Column(BigInteger, primary_key=True, index=True)
+    path = Column(String, nullable=False, unique=True, index=True)
+    content = Column(String, nullable=False)  # TEXT type for large content
+    thread_id = Column(String, nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

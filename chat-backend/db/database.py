@@ -22,9 +22,18 @@ Base = declarative_base()
 
 # Dependency Injection용 함수
 async def get_db():
-    async with AsyncSessionLocal() as session:
+    session = AsyncSessionLocal()
+    try:
+        yield session
+    except Exception:
         try:
-            yield session
-        except Exception:
             await session.rollback()
-            raise
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            await session.close()
+        except Exception:
+            # SSE 스트리밍 중 커넥션이 이미 닫힌 경우 무시
+            pass

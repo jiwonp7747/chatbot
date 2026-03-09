@@ -14,7 +14,7 @@ import asyncio
 import os
 from sqlalchemy import text
 from db.database import engine, Base, AsyncSessionLocal
-from db.models import ChatSession, ChatMessage, ModelType, PromptTemplate
+from db.models import ChatSession, ChatMessage, ModelType, PromptTemplate, LargeData
 from db.model_type_migration import ensure_model_type_schema
 
 
@@ -22,6 +22,16 @@ async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print("✅ 테이블 생성 완료")
+
+
+async def ensure_chat_message_columns(eng):
+    """chat_message 테이블에 tool_call_id, tool_name 컬럼 추가 (이미 있으면 무시)"""
+    async with eng.begin() as conn:
+        for col, col_type in [("tool_call_id", "VARCHAR"), ("tool_name", "VARCHAR")]:
+            await conn.execute(text(f"""
+                ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS {col} {col_type}
+            """))
+    print("✅ chat_message 컬럼 보강 완료 (tool_call_id, tool_name)")
 
 
 async def seed_models():
@@ -100,6 +110,7 @@ async def seed_prompts():
 async def main():
     print("🚀 DB 초기화 시작...")
     await create_tables()
+    await ensure_chat_message_columns(engine)
     await ensure_model_type_schema(engine)
     print("✅ model_type 스키마 보강 완료")
     await seed_models()

@@ -9,3 +9,5 @@ uvicorn~=0.38.0
 langchain
 langgraph
 langchain-google-genai
+deepagents
+langchain-core
