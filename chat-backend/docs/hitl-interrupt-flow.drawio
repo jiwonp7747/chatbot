@@ -1,0 +1,471 @@
+<mxfile host="app.diagrams.net" modified="2026-03-08T00:00:00.000Z" agent="Claude" version="22.1.2">
+  <diagram id="hitl-flow" name="HITL Interrupt Flow">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="2400" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================ -->
+        <!-- TITLE -->
+        <!-- ============================================ -->
+        <mxCell id="title" value="&lt;b&gt;&lt;font style=&quot;font-size: 18px;&quot;&gt;HITL (Human-in-the-Loop) Interrupt Flow&lt;/font&gt;&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="600" y="20" width="400" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- PHASE 1: NEW CHAT REQUEST -->
+        <!-- ============================================ -->
+        <mxCell id="phase1-group" value="&lt;b&gt;1. New Chat Request&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#6c8ebf;verticalAlign=top;fontSize=13;fontColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="1700" height="130" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-frontend" value="&lt;b&gt;Frontend&lt;/b&gt;&lt;br&gt;(User)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="120" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-router" value="&lt;b&gt;Router&lt;/b&gt;&lt;br&gt;POST /stream-chat-graph" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="260" y="120" width="170" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-service" value="&lt;b&gt;Service&lt;/b&gt;&lt;br&gt;process_chat()&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;thread_id = uuid4()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="510" y="110" width="170" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-orchestrator" value="&lt;b&gt;Orchestrator&lt;/b&gt;&lt;br&gt;run(thread_id, initial_state)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="760" y="120" width="200" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-main-agent" value="&lt;b&gt;Main Agent&lt;/b&gt;&lt;br&gt;agent.astream()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="120" width="160" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-subagent-dispatch" value="&lt;b&gt;SubAgent 위임&lt;/b&gt;&lt;br&gt;task() 도구 호출" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="120" width="150" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Phase 1 arrows -->
+        <mxCell id="e1-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;" edge="1" source="n-frontend" target="n-router" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;" edge="1" source="n-router" target="n-service" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;" edge="1" source="n-service" target="n-orchestrator" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;" edge="1" source="n-orchestrator" target="n-main-agent" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;" edge="1" source="n-main-agent" target="n-subagent-dispatch" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- PHASE 2: INTERRUPT TRIGGER -->
+        <!-- ============================================ -->
+        <mxCell id="phase2-group" value="&lt;b&gt;2. Interrupt Trigger (SubAgent)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#d79b00;verticalAlign=top;fontSize=13;fontColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="240" width="1700" height="160" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-tool-call" value="&lt;b&gt;SubAgent&lt;/b&gt;&lt;br&gt;도구 호출 결정&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;예: get_defect_summary&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="60" y="280" width="180" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-interrupt-check" value="&lt;b&gt;interrupt_on&lt;/b&gt;&lt;br&gt;설정 확인" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="320" y="275" width="140" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-build-desc" value="&lt;b&gt;build_hitl_confirm_description()&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#666&quot;&gt;reason + tool_detail JSON 생성&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="540" y="280" width="230" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-node-interrupt" value="&lt;b&gt;NodeInterrupt&lt;/b&gt;&lt;br&gt;발생" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="850" y="285" width="130" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-bubble-up" value="&lt;b&gt;__interrupt__&lt;/b&gt;&lt;br&gt;chunk 버블업&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;SubAgent → Main → Orchestrator&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="280" width="210" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-no-hitl" value="&lt;b&gt;도구 직접 실행&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;(HITL 미적용)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="340" y="380" width="140" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Phase 2 arrows -->
+        <mxCell id="e2-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;" edge="1" source="n-tool-call" target="n-interrupt-check" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2-2" value="&lt;font color=&quot;#b85450&quot;&gt;&lt;b&gt;Yes&lt;/b&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-interrupt-check" target="n-build-desc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-build-desc" target="n-node-interrupt" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-node-interrupt" target="n-bubble-up" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2-no" value="&lt;font color=&quot;#82b366&quot;&gt;&lt;b&gt;No&lt;/b&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;" edge="1" source="n-interrupt-check" target="n-no-hitl" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Connection from Phase 1 to Phase 2 -->
+        <mxCell id="e-p1-p2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;dashed=1;" edge="1" source="n-subagent-dispatch" target="n-tool-call" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1500" y="150"/>
+              <mxPoint x="1500" y="260"/>
+              <mxPoint x="150" y="260"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- PHASE 3: INTERRUPT HANDLING (Orchestrator) -->
+        <!-- ============================================ -->
+        <mxCell id="phase3-group" value="&lt;b&gt;3. Interrupt Handling (Orchestrator)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#b85450;verticalAlign=top;fontSize=13;fontColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="1700" height="160" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-extract" value="&lt;b&gt;_extract_interrupt_&lt;br&gt;action_requests()&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;chunk에서 추출&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="60" y="470" width="170" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-getstate" value="&lt;b&gt;aget_state()&lt;/b&gt;&lt;br&gt;서브에이전트 식별&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;messages → task →&lt;br&gt;args.subagent_type&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="300" y="465" width="180" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-build-ctx" value="&lt;b&gt;_build_interrupt_context()&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;tool_context + HitlToolCall[]&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="550" y="470" width="210" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-store-tools" value="&lt;b&gt;_interrupted_tools&lt;/b&gt;&lt;br&gt;[thread_id] 저장&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;{tools, count,&lt;br&gt;original_tool_calls}&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="830" y="465" width="170" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-confirm-sse" value="&lt;b&gt;ChatResponse&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;status=CONFIRM&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;thread_id, tool_calls,&lt;br&gt;tool_context, available_tools&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="460" width="210" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-pending" value="&lt;b&gt;_hitl_pending_requests&lt;/b&gt;&lt;br&gt;[thread_id] 보관&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;{request, created_at}&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="470" width="180" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Phase 3 arrows -->
+        <mxCell id="e3-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-extract" target="n-getstate" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-getstate" target="n-build-ctx" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d79b00;" edge="1" source="n-build-ctx" target="n-store-tools" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-store-tools" target="n-confirm-sse" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d79b00;" edge="1" source="n-confirm-sse" target="n-pending" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Connection from Phase 2 to Phase 3 -->
+        <mxCell id="e-p2-p3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;dashed=1;strokeWidth=2;" edge="1" source="n-bubble-up" target="n-extract" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1165" y="420"/>
+              <mxPoint x="145" y="420"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- PHASE 4: USER DECISION -->
+        <!-- ============================================ -->
+        <mxCell id="phase4-group" value="&lt;b&gt;4. User Decision (Frontend)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#6c8ebf;verticalAlign=top;fontSize=13;fontColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="1700" height="150" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-user-sees" value="&lt;b&gt;CONFIRM UI 표시&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;도구 정보 + 판단 근거&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="100" y="660" width="170" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-decision" value="&lt;b&gt;사용자 결정&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="400" y="650" width="140" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-approve" value="&lt;b&gt;&lt;font color=&quot;#82b366&quot;&gt;Approve&lt;/font&gt;&lt;/b&gt;&lt;br&gt;approved=true" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="650" y="640" width="130" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-reject" value="&lt;b&gt;&lt;font color=&quot;#b85450&quot;&gt;Reject&lt;/font&gt;&lt;/b&gt;&lt;br&gt;approved=false" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="650" y="700" width="130" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-edit" value="&lt;b&gt;&lt;font color=&quot;#d79b00&quot;&gt;Edit&lt;/font&gt;&lt;/b&gt;&lt;br&gt;approved=false&lt;br&gt;edit_message=&quot;...&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="650" y="760" width="150" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-resume-req" value="&lt;b&gt;POST /chat/resume&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;ResumeRequest&lt;br&gt;{thread_id, approved,&lt;br&gt;edit_message?}&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="920" y="660" width="180" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Phase 4 arrows -->
+        <mxCell id="e4-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;" edge="1" source="n-user-sees" target="n-decision" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;" edge="1" source="n-decision" target="n-approve" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-decision" target="n-reject" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;" edge="1" source="n-decision" target="n-edit" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;" edge="1" source="n-approve" target="n-resume-req" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-reject" target="n-resume-req" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;" edge="1" source="n-edit" target="n-resume-req" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Connection from Phase 3 to Phase 4 -->
+        <mxCell id="e-p3-p4" value="&lt;font color=&quot;#b85450&quot;&gt;SSE&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;dashed=1;strokeWidth=2;" edge="1" source="n-confirm-sse" target="n-user-sees" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1175" y="610"/>
+              <mxPoint x="185" y="610"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- PHASE 5: RESUME PROCESSING -->
+        <!-- ============================================ -->
+        <mxCell id="phase5-group" value="&lt;b&gt;5. Resume Processing&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#82b366;verticalAlign=top;fontSize=13;fontColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="40" y="850" width="1700" height="170" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-pop-pending" value="&lt;b&gt;_hitl_pending_requests&lt;/b&gt;&lt;br&gt;.pop(thread_id)&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;원본 요청 복원&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="60" y="900" width="180" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-pop-tools" value="&lt;b&gt;_interrupted_tools&lt;/b&gt;&lt;br&gt;.pop(thread_id)&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;tool_count 확인&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="310" y="900" width="170" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-build-decisions" value="&lt;b&gt;decisions 구성&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="550" y="895" width="140" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-approve-cmd" value="&lt;font color=&quot;#82b366&quot;&gt;&lt;b&gt;approve&lt;/b&gt;&lt;/font&gt;&lt;br&gt;[{type: &quot;approve&quot;}]&lt;br&gt;× tool_count" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="760" y="870" width="160" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-reject-cmd" value="&lt;font color=&quot;#b85450&quot;&gt;&lt;b&gt;reject&lt;/b&gt;&lt;/font&gt;&lt;br&gt;[{type: &quot;reject&quot;, message}]&lt;br&gt;× tool_count" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="760" y="930" width="180" height="55" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-edit-cmd" value="&lt;font color=&quot;#d79b00&quot;&gt;&lt;b&gt;edit (reject)&lt;/b&gt;&lt;/font&gt;&lt;br&gt;[{type: &quot;reject&quot;,&lt;br&gt;message: &quot;수정: ...&quot;}]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="760" y="995" width="180" height="55" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-command" value="&lt;b&gt;Command&lt;/b&gt;&lt;br&gt;(resume=decisions)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="900" width="170" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-astream-resume" value="&lt;b&gt;agent.astream()&lt;/b&gt;&lt;br&gt;그래프 재개" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1290" y="900" width="150" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n-final-or-reinterrupt" value="&lt;b&gt;결과&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1510" y="895" width="120" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Phase 5 arrows -->
+        <mxCell id="e5-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d79b00;" edge="1" source="n-pop-pending" target="n-pop-tools" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;" edge="1" source="n-pop-tools" target="n-build-decisions" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;" edge="1" source="n-build-decisions" target="n-approve-cmd" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-build-decisions" target="n-reject-cmd" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-4b" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;" edge="1" source="n-build-decisions" target="n-edit-cmd" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;" edge="1" source="n-approve-cmd" target="n-command" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="n-reject-cmd" target="n-command" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-6b" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;" edge="1" source="n-edit-cmd" target="n-command" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;" edge="1" source="n-command" target="n-astream-resume" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;" edge="1" source="n-astream-resume" target="n-final-or-reinterrupt" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Connection from Phase 4 to Phase 5 -->
+        <mxCell id="e-p4-p5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;dashed=1;strokeWidth=2;" edge="1" source="n-resume-req" target="n-pop-pending" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1010" y="840"/>
+              <mxPoint x="150" y="840"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Re-interrupt loop -->
+        <mxCell id="e-reinterrupt" value="&lt;b&gt;&lt;font color=&quot;#b85450&quot;&gt;Re-interrupt&lt;br&gt;(Chain HITL)&lt;/font&gt;&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;dashed=1;strokeWidth=2;curved=1;" edge="1" source="n-final-or-reinterrupt" target="n-user-sees" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1680" y="930"/>
+              <mxPoint x="1680" y="690"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Final response -->
+        <mxCell id="n-done" value="&lt;b&gt;&lt;font color=&quot;#82b366&quot;&gt;Final Response&lt;/font&gt;&lt;/b&gt;&lt;br&gt;STREAMING → DONE&lt;br&gt;+ save_ai_message_to_db()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="1000" width="190" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-done" value="&lt;font color=&quot;#82b366&quot;&gt;&lt;b&gt;Complete&lt;/b&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;strokeWidth=2;" edge="1" source="n-final-or-reinterrupt" target="n-done" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- PHASE 6: SUBAGENT HITL CONFIG -->
+        <!-- ============================================ -->
+        <mxCell id="phase6-group" value="&lt;b&gt;6. SubAgent HITL Configuration&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#647687;verticalAlign=top;fontSize=13;fontColor=#647687;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1100" width="1700" height="280" as="geometry"/>
+        </mxCell>
+
+        <!-- RAG Agent -->
+        <mxCell id="rag-group" value="&lt;b&gt;search-documents (RAG Agent)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontSize=12;opacity=30;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1140" width="400" height="220" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rag-t1" value="&lt;b&gt;tag_search_tool&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot; style=&quot;font-size:10px&quot;&gt;태그 범위 문서 검색&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1180" width="160" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rag-t2" value="&lt;b&gt;semantic_search_tool&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot; style=&quot;font-size:10px&quot;&gt;시맨틱 유사도 검색&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1240" width="160" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rag-hitl" value="&lt;b&gt;&lt;font color=&quot;#b85450&quot;&gt;interrupt_on&lt;/font&gt;&lt;/b&gt;&lt;br&gt;approve / edit / reject" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="280" y="1200" width="160" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e-rag1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="rag-t1" target="rag-hitl" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-rag2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;" edge="1" source="rag-t2" target="rag-hitl" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rag-desc" value="&lt;b&gt;build_hitl_confirm_description&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot; style=&quot;font-size:10px&quot;&gt;domain=&quot;rag&quot;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="100" y="1310" width="200" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Fab Trace Agent -->
+        <mxCell id="fab-group" value="&lt;b&gt;analyze-fab-trace (Fab Trace Agent)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontSize=12;opacity=30;" vertex="1" parent="1">
+          <mxGeometry x="500" y="1140" width="760" height="220" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fab-t1" value="&lt;b&gt;get_defect_summary&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="520" y="1180" width="140" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="fab-t2" value="&lt;b&gt;get_defect_map&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="670" y="1180" width="130" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="fab-t3" value="&lt;b&gt;get_defects&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="810" y="1180" width="120" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="fab-t4" value="&lt;b&gt;get_fdc_traceback&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="940" y="1180" width="130" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="fab-t5" value="&lt;b&gt;get_equipment_health&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="520" y="1225" width="145" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="fab-t6" value="&lt;b&gt;get_trace_summary&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="680" y="1225" width="130" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="fab-t7" value="&lt;b&gt;get_param_drift&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="825" y="1225" width="120" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="fab-t8" value="&lt;b&gt;get_trace_compare&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="960" y="1225" width="130" height="35" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fab-hitl" value="&lt;b&gt;&lt;font color=&quot;#b85450&quot;&gt;interrupt_on (ALL 8 tools)&lt;/font&gt;&lt;/b&gt;&lt;br&gt;approve / edit / reject" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="680" y="1280" width="200" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fab-desc" value="&lt;b&gt;build_hitl_confirm_description&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot; style=&quot;font-size:10px&quot;&gt;domain=&quot;fab_trace&quot;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="1290" width="200" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- arrows from fab tools to hitl -->
+        <mxCell id="e-fab-h" value="&lt;font color=&quot;#b85450&quot; style=&quot;font-size:10px&quot;&gt;all tools →&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;dashed=1;" edge="1" source="fab-t3" target="fab-hitl" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- MCP Tool Agent -->
+        <mxCell id="mcp-group" value="&lt;b&gt;execute-tools (Tool Agent / MCP)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontSize=12;opacity=30;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="1140" width="420" height="220" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="mcp-tools" value="&lt;b&gt;MCP Tools&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;EChart, Memory 등&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="1200" width="140" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="mcp-no-hitl" value="&lt;b&gt;&lt;font color=&quot;#82b366&quot;&gt;interrupt_on: NONE&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#999&quot;&gt;HITL 미적용&lt;br&gt;도구 직접 실행&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="1200" width="150" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e-mcp" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;" edge="1" source="mcp-tools" target="mcp-no-hitl" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- LEGEND -->
+        <!-- ============================================ -->
+        <mxCell id="legend-group" value="&lt;b&gt;Legend&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#999;verticalAlign=top;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1410" width="700" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg-1" value="API / Frontend" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1440" width="100" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg-2" value="Agent / LangGraph" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="170" y="1440" width="110" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg-3" value="Interrupt / HITL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="290" y="1440" width="100" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg-4" value="Tool / Storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1440" width="100" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg-5" value="Storage (dict)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="510" y="1440" width="100" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg-6" value="Complete / OK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="620" y="1440" width="100" height="30" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
