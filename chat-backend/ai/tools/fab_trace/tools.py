@@ -8,6 +8,7 @@ Fab Trace API 도구 — 시나리오 1: 불량률 상승 원인 추적
 
 import os
 import json
+from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -65,8 +66,8 @@ async def _call_api(path: str, params: dict | None = None) -> str:
 
 @tool
 async def get_defect_summary(
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
 ) -> str:
     """불량 유형별 집계를 조회합니다. Particle, Scratch, Mura 등 어떤 불량이 얼마나 발생했는지 파악할 때 사용합니다.
     수율 하락 원인 분석의 첫 단계로, 급증한 불량 유형을 식별합니다.
@@ -77,9 +78,9 @@ async def get_defect_summary(
     """
     params = {}
     if start:
-        params["start"] = start
+        params["start"] = start.isoformat()
     if end:
-        params["end"] = end
+        params["end"] = end.isoformat()
     return await _call_api("/api/defects/summary", params)
 
 
@@ -87,8 +88,8 @@ async def get_defect_summary(
 
 @tool
 async def get_defect_map(
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
     defect_type: Optional[str] = None,
     limit: int = 500,
 ) -> str:
@@ -106,9 +107,9 @@ async def get_defect_map(
     """
     params = {"limit": limit}
     if start:
-        params["start"] = start
+        params["start"] = start.isoformat()
     if end:
-        params["end"] = end
+        params["end"] = end.isoformat()
     if defect_type:
         params["defect_type"] = defect_type
     return await _call_api("/api/defects/map", params)
@@ -118,8 +119,8 @@ async def get_defect_map(
 
 @tool
 async def get_defects(
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
     defect_type: Optional[str] = None,
     lot_id: Optional[str] = None,
     limit: int = 50,
@@ -138,9 +139,9 @@ async def get_defects(
     """
     params = {"limit": limit, "offset": offset}
     if start:
-        params["start"] = start
+        params["start"] = start.isoformat()
     if end:
-        params["end"] = end
+        params["end"] = end.isoformat()
     if defect_type:
         params["defect_type"] = defect_type
     if lot_id:
@@ -193,8 +194,8 @@ async def get_equipment_health(
 @tool
 async def get_trace_summary(
     equipment_id: str,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
     param_name: Optional[str] = None,
 ) -> str:
     """특정 설비의 파라미터 통계 요약(평균, 표준편차, 최솟값, 최댓값, OOS율)을 조회합니다.
@@ -208,9 +209,9 @@ async def get_trace_summary(
     """
     params = {}
     if start:
-        params["start"] = start
+        params["start"] = start.isoformat()
     if end:
-        params["end"] = end
+        params["end"] = end.isoformat()
     if param_name:
         params["param_name"] = param_name
     return await _call_api(f"/api/trace/{equipment_id}/summary", params)
@@ -222,8 +223,8 @@ async def get_trace_summary(
 async def get_param_drift(
     equipment_id: str,
     param_name: str,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
     interval: str = "1h",
 ) -> str:
     """설비 파라미터의 시간에 따른 drift(편차 추이)를 분석합니다.
@@ -239,9 +240,9 @@ async def get_param_drift(
     """
     params = {"equipment_id": equipment_id, "param_name": param_name, "interval": interval}
     if start:
-        params["start"] = start
+        params["start"] = start.isoformat()
     if end:
-        params["end"] = end
+        params["end"] = end.isoformat()
     return await _call_api("/api/analytics/drift", params)
 
 
@@ -251,8 +252,8 @@ async def get_param_drift(
 async def get_trace_compare(
     equipment_type: str,
     param_name: str,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
 ) -> str:
     """동일 타입 설비 간 특정 파라미터를 비교합니다. 같은 종류 설비(예: CVD 3대) 중 어느 설비만
     이상 값을 보이는지 확인하여 개별 설비 문제인지 전체 라인 문제인지 판별합니다.
@@ -265,7 +266,244 @@ async def get_trace_compare(
     """
     params = {"equipment_type": equipment_type, "param_name": param_name}
     if start:
-        params["start"] = start
+        params["start"] = start.isoformat()
     if end:
-        params["end"] = end
+        params["end"] = end.isoformat()
     return await _call_api("/api/trace/compare", params)
+
+
+# ── 9. 설비 목록 ──────────────────────────────────────────
+
+@tool
+async def get_equipment_list() -> str:
+    """전체 설비 목록과 현재 상태를 조회합니다. 각 설비의 ID, 타입, 챔버 수, 상태(RUNNING/IDLE/PM)를 확인할 때 사용합니다.
+    분석 전 어떤 설비가 있는지 파악하거나, 특정 타입의 설비 ID를 찾을 때 활용합니다."""
+    return await _call_api("/api/equipment")
+
+
+# ── 10. 설비 상세 정보 ────────────────────────────────────
+
+@tool
+async def get_equipment_detail(equipment_id: str) -> str:
+    """특정 설비의 상세 정보를 조회합니다. 설비 타입, 챔버 수, 설치 위치, 현재 상태, 마지막 PM 일시 등을 확인합니다.
+
+    Args:
+        equipment_id: 설비 ID (예: CVD-A01, ETCH-B01)"""
+    return await _call_api(f"/api/equipment/{equipment_id}")
+
+
+# ── 11. 최신 센서 스냅샷 ──────────────────────────────────
+
+@tool
+async def get_trace_latest() -> str:
+    """모든 설비의 최신 센서 데이터 스냅샷을 조회합니다. 현재 시점의 각 설비별 파라미터 값을 한눈에 확인할 때 사용합니다.
+    실시간 모니터링이나 현재 상태 파악에 활용됩니다."""
+    return await _call_api("/api/trace/latest")
+
+
+# ── 12. OOS 데이터 조회 ───────────────────────────────────
+
+@tool
+async def get_trace_oos(
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    equipment_id: Optional[str] = None,
+    param_name: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> str:
+    """Spec 범위(LSL/USL)를 벗어난 OOS(Out-of-Spec) 트레이스 데이터를 조회합니다.
+    어떤 설비에서, 어떤 파라미터가, 얼마나 자주 Spec을 이탈하는지 파악할 때 사용합니다.
+
+    Args:
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재
+        equipment_id: 설비 ID 필터 (예: CVD-A01)
+        param_name: 파라미터명 필터 (예: temperature)
+        limit: 최대 반환 건수 (기본 100)
+        offset: 페이지 오프셋"""
+    params = {"limit": limit, "offset": offset}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    if equipment_id: params["equipment_id"] = equipment_id
+    if param_name: params["param_name"] = param_name
+    return await _call_api("/api/trace/oos", params)
+
+
+# ── 13. 설비 트레이스 데이터 ─────────────────────────────
+
+@tool
+async def get_trace_data(
+    equipment_id: str,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    param_name: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> str:
+    """특정 설비의 원시 트레이스 데이터를 조회합니다. 센서별 실측값, Spec 범위, OOS 여부를 시계열로 확인할 때 사용합니다.
+    상세한 시계열 분석이나 특정 시점의 정확한 값을 확인할 때 활용합니다.
+
+    Args:
+        equipment_id: 설비 ID (예: CVD-A01, ETCH-B01)
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재
+        param_name: 특정 파라미터만 조회 (예: temperature, pressure)
+        limit: 최대 반환 건수 (기본 100)
+        offset: 페이지 오프셋"""
+    params = {"limit": limit, "offset": offset}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    if param_name: params["param_name"] = param_name
+    return await _call_api(f"/api/trace/{equipment_id}", params)
+
+
+# ── 14. 알람 목록 ─────────────────────────────────────────
+
+@tool
+async def get_alarms(
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    equipment_id: Optional[str] = None,
+    alarm_level: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> str:
+    """알람 발생 이력을 조회합니다. 설비별, 알람 레벨별로 필터링하여 최근 알람 현황을 파악합니다.
+    CRITICAL/WARNING/INFO 레벨로 구분되며, 설비 이상 징후를 조기에 감지할 때 사용합니다.
+
+    Args:
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재
+        equipment_id: 설비 ID 필터 (예: CVD-A01)
+        alarm_level: 알람 레벨 필터 (CRITICAL, WARNING, INFO)
+        limit: 최대 반환 건수 (기본 100)
+        offset: 페이지 오프셋"""
+    params = {"limit": limit, "offset": offset}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    if equipment_id: params["equipment_id"] = equipment_id
+    if alarm_level: params["alarm_level"] = alarm_level
+    return await _call_api("/api/alarms", params)
+
+
+# ── 15. 알람 집계 ─────────────────────────────────────────
+
+@tool
+async def get_alarm_summary(
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+) -> str:
+    """설비별, 알람 레벨별 알람 발생 건수를 집계합니다. 어떤 설비에서 CRITICAL 알람이 많이 발생했는지
+    한눈에 파악할 때 사용합니다. 설비 건강도 분석의 보조 지표로 활용됩니다.
+
+    Args:
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재"""
+    params = {}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    return await _call_api("/api/alarms/summary", params)
+
+
+# ── 16. 알람 추이 ─────────────────────────────────────────
+
+@tool
+async def get_alarm_trend(
+    equipment_id: str,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    interval: str = "1h",
+) -> str:
+    """특정 설비의 알람 발생 추이를 시간대별로 조회합니다. 알람이 특정 시간대에 집중되는지,
+    점차 증가하는 추세인지 파악하여 설비 열화나 간헐적 이상을 감지합니다.
+
+    Args:
+        equipment_id: 설비 ID (예: CVD-A02, ETCH-B01)
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재
+        interval: 집계 간격 (5m: 5분, 1h: 1시간, 1d: 1일)"""
+    params = {"interval": interval}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    return await _call_api(f"/api/alarms/{equipment_id}/trend", params)
+
+
+# ── 17. 이벤트 로그 ───────────────────────────────────────
+
+@tool
+async def get_events(
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    equipment_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> str:
+    """설비 이벤트 로그를 조회합니다. PM(예방정비), 레시피 변경, 캘리브레이션 등 설비에서 발생한 이벤트를 확인합니다.
+    불량 발생 전후에 어떤 이벤트가 있었는지 추적하여 원인 파악에 활용합니다.
+
+    Args:
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재
+        equipment_id: 설비 ID 필터 (예: CVD-A01)
+        event_type: 이벤트 유형 필터 (PM, RECIPE_CHANGE, CALIBRATION, CHAMBER_CLEAN, ERROR 등)
+        limit: 최대 반환 건수 (기본 100)
+        offset: 페이지 오프셋"""
+    params = {"limit": limit, "offset": offset}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    if equipment_id: params["equipment_id"] = equipment_id
+    if event_type: params["event_type"] = event_type
+    return await _call_api("/api/events", params)
+
+
+# ── 18. 설비 이벤트 타임라인 ─────────────────────────────
+
+@tool
+async def get_event_timeline(
+    equipment_id: str,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    limit: int = 100,
+) -> str:
+    """특정 설비의 이벤트를 시간순으로 조회합니다. PM, 레시피 변경, 오류 등 이벤트 이력을 타임라인으로 확인하여
+    설비 상태 변화의 인과관계를 분석합니다.
+
+    Args:
+        equipment_id: 설비 ID (예: CVD-A01, ETCH-B01)
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재
+        limit: 최대 반환 건수 (기본 100)"""
+    params = {"limit": limit}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    return await _call_api(f"/api/events/{equipment_id}/timeline", params)
+
+
+# ── 19. 파라미터 상관관계 분석 ───────────────────────────
+
+@tool
+async def get_param_correlation(
+    equipment_id: str,
+    param_x: str,
+    param_y: str,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+) -> str:
+    """두 파라미터 간 상관관계(Pearson 상관계수)를 분석합니다. 예를 들어 온도와 압력이 함께 변하는지,
+    가스 유량 변화가 증착 두께에 영향을 주는지 등을 정량적으로 확인합니다.
+    - 상관계수 0.7 이상: 강한 양의 상관
+    - 상관계수 -0.7 이하: 강한 음의 상관
+    - 상관계수 -0.3~0.3: 상관 없음
+
+    Args:
+        equipment_id: 설비 ID (예: CVD-A01)
+        param_x: 첫 번째 파라미터명 (예: temperature)
+        param_y: 두 번째 파라미터명 (예: pressure)
+        start: 조회 시작 시간 (ISO 8601). 미입력시 최근 24시간
+        end: 조회 종료 시간 (ISO 8601). 미입력시 현재"""
+    params = {"equipment_id": equipment_id, "param_x": param_x, "param_y": param_y}
+    if start: params["start"] = start.isoformat()
+    if end: params["end"] = end.isoformat()
+    return await _call_api("/api/analytics/correlation", params)

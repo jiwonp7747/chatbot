@@ -7,6 +7,17 @@ from .tools import (
     get_trace_summary,
     get_param_drift,
     get_trace_compare,
+    get_equipment_list,
+    get_equipment_detail,
+    get_trace_latest,
+    get_trace_oos,
+    get_trace_data,
+    get_alarms,
+    get_alarm_summary,
+    get_alarm_trend,
+    get_events,
+    get_event_timeline,
+    get_param_correlation,
 )
 
 
@@ -21,4 +32,15 @@ def get_fab_trace_tools() -> list:
         get_trace_summary,
         get_param_drift,
         get_trace_compare,
+        get_equipment_list,
+        get_equipment_detail,
+        get_trace_latest,
+        get_trace_oos,
+        get_trace_data,
+        get_alarms,
+        get_alarm_summary,
+        get_alarm_trend,
+        get_events,
+        get_event_timeline,
+        get_param_correlation,
     ]
