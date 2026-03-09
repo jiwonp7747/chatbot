@@ -1,12 +1,23 @@
 import { defineStore } from 'pinia';
-import { ChatSession, Message, ModelType, ChatResponse } from '../types/chat';
+import { ChatSession, Message, ModelType, ChatResponse, HitlToolCall, ToolSchema, EditedToolCall, AvailableTool } from '../types/chat';
 import { chatService } from '../services/chatService';
 import { storage } from '../utils/storage';
 
 interface PendingConfirm {
   threadId: string;
-  toolName: string;
-  toolArgs: Record<string, unknown>;
+  toolCalls: HitlToolCall[];     // interrupt된 도구 목록
+  // 동적 컨텍스트
+  toolContext: string;           // 에이전트 판단 근거 (1회, 공통)
+  availableTools: AvailableTool[];      // 수정 가능 도구 목록
+  // 수정 모드 (EDIT decision)
+  isEditing: boolean;
+  toolSchemas: Record<string, ToolSchema>;     // 도구별 스키마
+  editedArgs: Record<number, Record<string, unknown>>;  // idx → 수정된 인자
+  editedToolNames: Record<number, string>;     // idx → 변경된 도구명
+  schemasLoading: boolean;
+  // 거부 모드 (REJECT + message)
+  isRejecting: boolean;
+  rejectMessage: string;
 }
 
 interface SubProgressEntry {
@@ -230,10 +241,19 @@ export const useChatStore = defineStore('chat', {
           } else if (response.status === 'confirm') {
             this.streamingStatusMap[sessionId] = 'confirm';
             this.streamingContentMap[sessionId] = response.content;
+            const toolCalls = response.tool_calls || [];
             this.pendingConfirm = {
               threadId: response.thread_id!,
-              toolName: response.tool_name!,
-              toolArgs: response.tool_args || {},
+              toolCalls,
+              toolContext: response.tool_context || '',
+              availableTools: response.available_tools || [],
+              isEditing: false,
+              toolSchemas: {},
+              editedArgs: {},
+              editedToolNames: {},
+              schemasLoading: false,
+              isRejecting: false,
+              rejectMessage: '',
             };
           } else if (response.status === 'error') {
             const errorMessage: Message = {
@@ -367,10 +387,19 @@ export const useChatStore = defineStore('chat', {
       } else if (response.status === 'confirm') {
         this.streamingStatusMap[sessionId] = 'confirm';
         this.streamingContentMap[sessionId] = response.content;
+        const toolCalls = response.tool_calls || [];
         this.pendingConfirm = {
           threadId: response.thread_id!,
-          toolName: response.tool_name!,
-          toolArgs: response.tool_args || {},
+          toolCalls,
+          toolContext: response.tool_context || '',
+          availableTools: response.available_tools || [],
+          isEditing: false,
+          toolSchemas: {},
+          editedArgs: {},
+          editedToolNames: {},
+          schemasLoading: false,
+          isRejecting: false,
+          rejectMessage: '',
         };
       } else if (response.status === 'done') {
         const currentContent = this.streamingContentMap[sessionId] || '';
@@ -452,10 +481,115 @@ export const useChatStore = defineStore('chat', {
       );
     },
 
-    rejectToolCall() {
+    async toggleEditMode() {
+      if (!this.pendingConfirm) return;
+      const pc = this.pendingConfirm;
+      pc.isEditing = !pc.isEditing;
+      pc.isRejecting = false;
+      if (pc.isEditing) {
+        // 현재 args로 pre-fill
+        pc.editedArgs = {};
+        pc.editedToolNames = {};
+        pc.toolCalls.forEach((tc, idx) => {
+          pc.editedArgs[idx] = { ...tc.args };
+          pc.editedToolNames[idx] = tc.name;
+        });
+        // 스키마 fetch
+        if (Object.keys(pc.toolSchemas).length === 0) {
+          pc.schemasLoading = true;
+          try {
+            const allToolNames = [...new Set<string>([
+              ...pc.toolCalls.map(tc => tc.name),
+              ...pc.availableTools.map(t => t.name),
+            ])];
+            const schemas = await chatService.fetchToolSchemas(allToolNames);
+            const schemaMap: Record<string, ToolSchema> = {};
+            for (const s of schemas) {
+              schemaMap[s.name] = s;
+            }
+            pc.toolSchemas = schemaMap;
+          } catch (e) {
+            console.error('스키마 로드 실패:', e);
+          } finally {
+            pc.schemasLoading = false;
+          }
+        }
+      }
+    },
+
+    onToolNameChange(idx: number, newName: string) {
+      if (!this.pendingConfirm) return;
+      const pc = this.pendingConfirm;
+      pc.editedToolNames[idx] = newName;
+      // 새 도구의 default 값으로 args 리셋
+      const schema = pc.toolSchemas[newName];
+      if (schema?.schema?.properties) {
+        const defaults: Record<string, unknown> = {};
+        for (const [key, prop] of Object.entries(schema.schema.properties)) {
+          defaults[key] = prop.default ?? null;
+        }
+        pc.editedArgs[idx] = defaults;
+      } else {
+        pc.editedArgs[idx] = {};
+      }
+    },
+
+    submitEditedToolCall() {
       if (!this.pendingConfirm || !this.streamingSessionId) return;
-      const { threadId } = this.pendingConfirm;
+
+      const pc = this.pendingConfirm;
       const sessionId = this.streamingSessionId;
+
+      // edited_tool_calls 배열 구성
+      const editedToolCalls: EditedToolCall[] = pc.toolCalls.map((_, idx) => ({
+        name: pc.editedToolNames[idx] || pc.toolCalls[idx].name,
+        args: pc.editedArgs[idx] || pc.toolCalls[idx].args,
+      }));
+
+      const threadId = pc.threadId;
+      this.pendingConfirm = null;
+      this.streamingContentMap[sessionId] = '';
+      this.streamingStatusMap[sessionId] = 'progress';
+
+      const modelToUse = this.sessions.find(s => s.id === sessionId)?.model || this.selectedModel;
+
+      chatService.resumeChat(
+        {
+          thread_id: threadId,
+          approved: true,
+          model: modelToUse,
+          chat_session_id: parseInt(sessionId) || null,
+          edited_tool_calls: editedToolCalls,
+        },
+        (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
+        (error: Error) => {
+          console.error('Resume error:', error);
+          delete this.streamingContentMap[sessionId];
+          delete this.streamingStatusMap[sessionId];
+          this.streamingSessionId = null;
+        },
+        () => {}
+      );
+    },
+
+    toggleRejectMode() {
+      if (!this.pendingConfirm) return;
+      const pc = this.pendingConfirm;
+      pc.isRejecting = !pc.isRejecting;
+      pc.isEditing = false;
+      if (pc.isRejecting) {
+        pc.rejectMessage = '';
+      }
+    },
+
+    submitReject() {
+      if (!this.pendingConfirm || !this.streamingSessionId) return;
+
+      const pc = this.pendingConfirm;
+      const sessionId = this.streamingSessionId;
+      const threadId = pc.threadId;
+      const editMessage = pc.rejectMessage.trim() || '사용자가 도구 실행을 거부했습니다.';
+
       this.pendingConfirm = null;
       this.streamingContentMap[sessionId] = '';
       this.streamingStatusMap[sessionId] = 'progress';
@@ -468,6 +602,7 @@ export const useChatStore = defineStore('chat', {
           approved: false,
           model: modelToUse,
           chat_session_id: parseInt(sessionId) || null,
+          edit_message: editMessage,
         },
         (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
         (error: Error) => {

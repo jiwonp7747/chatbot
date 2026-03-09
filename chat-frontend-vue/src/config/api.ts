@@ -20,6 +20,7 @@ export const API_CONFIG = {
     mcpTools: '/mcp/tools',
     ragTags: '/rag/tags/tree',
     resumeChat: '/chat/resume',
+    toolSchemas: '/chat/tool-schemas',
   }
 };
 
@@ -57,4 +58,8 @@ export const getRagTagsUrl = (): string => {
 
 export const getResumeChatUrl = (): string => {
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.resumeChat}`;
+};
+
+export const getToolSchemasUrl = (): string => {
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.toolSchemas}`;
 };

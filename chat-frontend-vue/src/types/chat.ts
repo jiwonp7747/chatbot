@@ -5,18 +5,66 @@ export interface ChatRequest {
   rag_tags: string[] | null;
 }
 
+export interface HitlToolCallDetail {
+  tool_name: string;
+  description: string;
+  args: string;
+}
+
+export interface HitlToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  detail?: HitlToolCallDetail;  // 도구별 상세 정보
+}
+
+export interface AvailableTool {
+  name: string;
+  description: string;
+}
+
 export interface ChatResponse {
   content: string;
   status: 'progress' | 'streaming' | 'done' | 'error' | 'confirm' | 'sub_progress';
   error: string | null;
   // HITL 필드 (confirm 시에만 사용)
   thread_id?: string;
-  tool_name?: string;
-  tool_args?: Record<string, unknown>;
+  tool_calls?: HitlToolCall[];   // interrupt된 도구 목록
+  tool_context?: string;         // 에이전트 판단 근거 (1회, 공통)
+  available_tools?: AvailableTool[];  // 수정 가능 도구 목록
   // sub_progress 필드
   agent_name?: string;
   sub_tools?: string[];
   parallel?: boolean;
+}
+
+export interface EditedToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface JsonSchemaProperty {
+  type?: string;
+  format?: string;
+  anyOf?: { type: string; format?: string }[];
+  title?: string;
+  default?: unknown;
+  description?: string;
+  enum?: string[];
+  items?: { type?: string };
+}
+
+export interface JsonSchema {
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+  title?: string;
+  type?: string;
+}
+
+export interface ToolSchema {
+  name: string;
+  description: string;
+  schema: JsonSchema;
+  agent: string;
 }
 
 export interface ResumeRequest {
@@ -24,6 +72,8 @@ export interface ResumeRequest {
   approved: boolean;
   chat_session_id?: number | null;
   model?: string;
+  edit_message?: string;  // 거부 시 에이전트에게 전달할 메시지
+  edited_tool_calls?: EditedToolCall[];  // EDIT decision용
 }
 
 export interface Message {

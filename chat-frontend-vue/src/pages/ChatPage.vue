@@ -59,15 +59,169 @@
     </div>
     <!-- HITL 도구 실행 확인 카드 -->
     <div v-if="store.pendingConfirm" class="confirm-card">
-      <div class="confirm-icon">&#128270;</div>
-      <div class="confirm-title">'{{ store.pendingConfirm.toolName }}' 실행 확인</div>
-      <div class="confirm-args" v-if="Object.keys(store.pendingConfirm.toolArgs).length">
-        <pre>{{ JSON.stringify(store.pendingConfirm.toolArgs, null, 2) }}</pre>
-      </div>
-      <div class="confirm-actions">
-        <button class="btn-approve" @click="store.approveToolCall()">승인</button>
-        <button class="btn-reject" @click="store.rejectToolCall()">거부</button>
-      </div>
+      <!-- 기본 모드 -->
+      <template v-if="!store.pendingConfirm.isEditing">
+        <div class="confirm-header">
+          <span class="confirm-icon">&#128270;</span>
+          <span class="confirm-title">도구 실행 확인 ({{ store.pendingConfirm.toolCalls.length }}건)</span>
+        </div>
+        <div v-if="store.pendingConfirm.toolContext" class="confirm-context">
+          <div class="confirm-context-label">💬 에이전트 판단</div>
+          <div class="confirm-context-text">{{ store.pendingConfirm.toolContext }}</div>
+        </div>
+        <div
+          v-for="(tc, idx) in store.pendingConfirm.toolCalls"
+          :key="idx"
+          class="confirm-tool-item"
+        >
+          <div class="confirm-args-label">⚙️ {{ tc.detail?.tool_name || tc.name }}</div>
+          <div v-if="tc.detail?.description" class="confirm-tool-detail">{{ tc.detail.description }}</div>
+          <pre>{{ JSON.stringify(tc.args, null, 2) }}</pre>
+        </div>
+        <div class="confirm-actions">
+          <button class="btn-approve" @click="store.approveToolCall()">승인</button>
+          <button class="btn-edit" @click="store.toggleEditMode()">수정</button>
+          <button class="btn-reject" @click="store.toggleRejectMode()">거부</button>
+        </div>
+        <!-- 거부 모드: 메시지 입력 -->
+        <template v-if="store.pendingConfirm.isRejecting">
+          <div class="reject-section">
+            <textarea
+              v-model="store.pendingConfirm.rejectMessage"
+              class="edit-textarea"
+              rows="2"
+              placeholder="거부 사유 또는 지시사항 (선택, 예: 다른 LOT로 조회해줘)"
+              spellcheck="false"
+            />
+            <div class="confirm-actions">
+              <button class="btn-reject-confirm" @click="store.submitReject()">거부 확인</button>
+              <button class="btn-cancel" @click="store.toggleRejectMode()">취소</button>
+            </div>
+          </div>
+        </template>
+      </template>
+      <!-- 수정 모드 (스키마 기반 폼) -->
+      <template v-else>
+        <div class="confirm-header">
+          <span class="confirm-icon">✏️</span>
+          <span class="confirm-title">도구 인자 수정</span>
+        </div>
+        <div v-if="store.pendingConfirm.schemasLoading" class="schema-loading">
+          스키마 로딩 중...
+        </div>
+        <template v-else>
+          <div
+            v-for="(tc, idx) in store.pendingConfirm.toolCalls"
+            :key="idx"
+            class="edit-tool-section"
+          >
+            <!-- 도구 선택 -->
+            <div class="edit-field">
+              <label class="edit-label">도구</label>
+              <select
+                class="edit-select"
+                :value="store.pendingConfirm.editedToolNames[idx] || tc.name"
+                @change="store.onToolNameChange(idx, ($event.target as HTMLSelectElement).value)"
+              >
+                <option
+                  v-for="tool in store.pendingConfirm.availableTools"
+                  :key="tool.name"
+                  :value="tool.name"
+                >{{ tool.name }} — {{ tool.description }}</option>
+              </select>
+            </div>
+            <!-- 스키마 기반 인자 폼 -->
+            <template v-if="getToolSchema(idx)?.schema?.properties">
+              <div
+                v-for="(prop, propName) in getToolSchema(idx)!.schema.properties"
+                :key="String(propName)"
+                class="edit-field"
+              >
+                <label class="edit-label">
+                  {{ String(propName) }}
+                  <span v-if="isRequired(idx, String(propName))" class="field-required">*</span>
+                </label>
+                <span v-if="prop.description" class="field-desc">{{ prop.description }}</span>
+                <!-- enum → select -->
+                <select
+                  v-if="prop.enum"
+                  class="edit-select"
+                  :value="store.pendingConfirm!.editedArgs[idx]?.[String(propName)] ?? prop.default ?? ''"
+                  @change="updateArg(idx, String(propName), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">-- 선택 --</option>
+                  <option v-for="opt in prop.enum" :key="opt" :value="opt">{{ opt }}</option>
+                </select>
+                <!-- boolean → checkbox -->
+                <input
+                  v-else-if="resolveType(prop) === 'boolean'"
+                  type="checkbox"
+                  class="edit-checkbox"
+                  :checked="!!store.pendingConfirm!.editedArgs[idx]?.[String(propName)]"
+                  @change="updateArg(idx, String(propName), ($event.target as HTMLInputElement).checked)"
+                />
+                <!-- integer/number → number input -->
+                <input
+                  v-else-if="resolveType(prop) === 'integer' || resolveType(prop) === 'number'"
+                  type="number"
+                  class="edit-input"
+                  :value="store.pendingConfirm!.editedArgs[idx]?.[String(propName)] ?? prop.default ?? ''"
+                  @input="updateArg(idx, String(propName), Number(($event.target as HTMLInputElement).value))"
+                />
+                <!-- string (datetime hint) -->
+                <input
+                  v-else-if="resolveType(prop) === 'string' && isDateTimeField(prop)"
+                  type="datetime-local"
+                  class="edit-input"
+                  :value="toDateTimeLocal(store.pendingConfirm!.editedArgs[idx]?.[String(propName)])"
+                  @input="updateArg(idx, String(propName), fromDateTimeLocal(($event.target as HTMLInputElement).value))"
+                />
+                <!-- string (default) -->
+                <input
+                  v-else-if="resolveType(prop) === 'string'"
+                  type="text"
+                  class="edit-input"
+                  :value="store.pendingConfirm!.editedArgs[idx]?.[String(propName)] ?? prop.default ?? ''"
+                  @input="updateArg(idx, String(propName), ($event.target as HTMLInputElement).value)"
+                />
+                <!-- array → comma-separated -->
+                <input
+                  v-else-if="resolveType(prop) === 'array'"
+                  type="text"
+                  class="edit-input"
+                  placeholder="쉼표로 구분"
+                  :value="arrayToString(store.pendingConfirm!.editedArgs[idx]?.[String(propName)])"
+                  @input="updateArg(idx, String(propName), stringToArray(($event.target as HTMLInputElement).value))"
+                />
+                <!-- fallback → JSON textarea -->
+                <textarea
+                  v-else
+                  class="edit-textarea"
+                  rows="2"
+                  :value="JSON.stringify(store.pendingConfirm!.editedArgs[idx]?.[String(propName)] ?? prop.default ?? null, null, 2)"
+                  @input="updateArgJson(idx, String(propName), ($event.target as HTMLTextAreaElement).value)"
+                />
+              </div>
+            </template>
+            <!-- 스키마 없음 → JSON fallback -->
+            <template v-else>
+              <div class="edit-field">
+                <label class="edit-label">인자 (JSON)</label>
+                <textarea
+                  class="edit-textarea"
+                  rows="4"
+                  :value="JSON.stringify(store.pendingConfirm!.editedArgs[idx] || tc.args, null, 2)"
+                  @input="updateArgJson(idx, '__raw__', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </div>
+            </template>
+          </div>
+        </template>
+        <div class="confirm-actions">
+          <button class="btn-approve" @click="store.submitEditedToolCall()">수정 실행</button>
+          <button class="btn-cancel" @click="store.toggleEditMode()">취소</button>
+        </div>
+      </template>
     </div>
     <div ref="messagesEndRef" />
   </div>
@@ -78,7 +232,7 @@ import { ref, watch, nextTick, onMounted, computed } from 'vue';
 import ChatMessage from '../components/ChatMessage.vue';
 import ModelSelector from '../components/ModelSelector.vue';
 import { useChatStore } from '../stores/chatStore';
-import type { ChatSession, ModelType } from '../types/chat';
+import type { ChatSession, ModelType, JsonSchemaProperty, ToolSchema } from '../types/chat';
 
 const store = useChatStore();
 
@@ -155,6 +309,83 @@ const groupedSubProgress = computed<SubProgressGroup[]>(() => {
 const showAgentHeaders = computed(() => {
   return groupedSubProgress.value.length > 1;
 });
+
+// ── HITL 수정 폼 헬퍼 ──
+
+function resolveType(prop: JsonSchemaProperty): string {
+  if (prop.type) return prop.type;
+  // Pydantic Optional: anyOf: [{type: "string"}, {type: "null"}]
+  if (prop.anyOf) {
+    const nonNull = prop.anyOf.find(t => t.type !== 'null');
+    return nonNull?.type || 'string';
+  }
+  return 'string';
+}
+
+function isDateTimeField(prop: JsonSchemaProperty): boolean {
+  // Pydantic datetime → anyOf 내부에 format: "date-time" 존재
+  if (prop.anyOf?.some(v => v.format === 'date-time')) return true;
+  if (prop.format === 'date-time') return true;
+  // fallback: description 기반
+  const desc = (prop.description || '').toLowerCase();
+  return desc.includes('iso 8601') || desc.includes('iso8601');
+}
+
+function toDateTimeLocal(val: unknown): string {
+  if (!val || typeof val !== 'string') return '';
+  // "2026-02-26T00:00:00Z" → "2026-02-26T00:00"
+  return val.replace(/Z$/, '').slice(0, 16);
+}
+
+function fromDateTimeLocal(val: string): string {
+  if (!val) return '';
+  return val + ':00Z';
+}
+
+function arrayToString(val: unknown): string {
+  if (Array.isArray(val)) return val.join(', ');
+  return '';
+}
+
+function stringToArray(val: string): string[] {
+  return val.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function getToolSchema(idx: number): ToolSchema | undefined {
+  if (!store.pendingConfirm) return undefined;
+  const toolName = store.pendingConfirm.editedToolNames[idx] || store.pendingConfirm.toolCalls[idx]?.name;
+  return store.pendingConfirm.toolSchemas[toolName];
+}
+
+function isRequired(idx: number, propName: string): boolean {
+  const schema = getToolSchema(idx);
+  return schema?.schema?.required?.includes(propName) || false;
+}
+
+function updateArg(idx: number, key: string, value: unknown) {
+  if (!store.pendingConfirm) return;
+  if (!store.pendingConfirm.editedArgs[idx]) {
+    store.pendingConfirm.editedArgs[idx] = {};
+  }
+  store.pendingConfirm.editedArgs[idx][key] = value;
+}
+
+function updateArgJson(idx: number, key: string, raw: string) {
+  if (!store.pendingConfirm) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (key === '__raw__') {
+      store.pendingConfirm.editedArgs[idx] = parsed;
+    } else {
+      if (!store.pendingConfirm.editedArgs[idx]) {
+        store.pendingConfirm.editedArgs[idx] = {};
+      }
+      store.pendingConfirm.editedArgs[idx][key] = parsed;
+    }
+  } catch {
+    // JSON 파싱 실패 시 무시 (타이핑 중)
+  }
+}
 
 const messagesEndRef = ref<HTMLDivElement>();
 const messagesContainerRef = ref<HTMLDivElement>();
@@ -327,7 +558,7 @@ watch(
 }
 
 .confirm-card {
-  max-width: 480px;
+  max-width: 640px;
   margin: 16px auto;
   padding: 20px 24px;
   background: var(--glass-bg);
@@ -335,47 +566,100 @@ watch(
   border-radius: 16px;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  text-align: center;
+}
+
+.confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .confirm-icon {
-  font-size: 28px;
-  margin-bottom: 8px;
+  font-size: 22px;
+  flex-shrink: 0;
 }
 
 .confirm-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-0);
-  margin-bottom: 12px;
 }
 
-.confirm-args {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
+/* 에이전트 판단 근거 */
+.confirm-context {
+  margin-bottom: 14px;
   padding: 12px;
-  margin-bottom: 16px;
+  background: rgba(100, 180, 255, 0.06);
+  border: 1px solid rgba(100, 180, 255, 0.12);
+  border-radius: 10px;
+}
+
+.confirm-context-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+.confirm-context-text {
+  font-size: 13px;
+  color: var(--text-1);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* 도구 항목 */
+.confirm-tool-item {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
   text-align: left;
   overflow-x: auto;
 }
 
-.confirm-args pre {
+.confirm-args-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+.confirm-tool-detail {
+  font-size: 13px;
+  color: var(--text-1);
+  line-height: 1.55;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.confirm-tool-item pre {
   margin: 0;
   font-size: 12px;
   color: var(--text-1);
   white-space: pre-wrap;
   word-break: break-all;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
 }
 
+/* 버튼 */
 .confirm-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: center;
 }
 
 .btn-approve,
-.btn-reject {
-  padding: 8px 24px;
+.btn-edit,
+.btn-reject,
+.btn-cancel {
+  padding: 8px 20px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
@@ -389,14 +673,203 @@ watch(
   color: #fff;
 }
 
-.btn-reject {
+.btn-edit {
+  background: rgba(255, 200, 60, 0.15);
+  color: rgba(255, 210, 80, 0.95);
+  border: 1px solid rgba(255, 200, 60, 0.2);
+}
+
+.btn-reject,
+.btn-cancel {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-1);
   border: 1px solid var(--glass-border);
 }
 
 .btn-approve:hover,
-.btn-reject:hover {
+.btn-edit:hover,
+.btn-reject:hover,
+.btn-cancel:hover {
+  opacity: 0.85;
+}
+
+/* 수정 모드 필드 */
+.edit-field {
+  margin-bottom: 14px;
+}
+
+.edit-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+/* 수정 모드 2열 레이아웃 */
+.edit-layout {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.edit-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-right {
+  flex-shrink: 0;
+  width: 180px;
+}
+
+.edit-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+}
+
+.edit-tool-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.edit-tool-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.edit-tool-checkbox {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.edit-tool-name {
+  font-size: 12px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edit-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-1);
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.edit-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* 수정 모드: 스키마 기반 폼 */
+.schema-loading {
+  text-align: center;
+  padding: 16px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.edit-tool-section {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.edit-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-1);
+  font-size: 12px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.edit-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.edit-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-1);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.edit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.edit-checkbox {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.field-required {
+  color: rgba(255, 100, 100, 0.85);
+  margin-left: 2px;
+}
+
+.field-desc {
+  display: block;
+  font-size: 10px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+/* 거부 모드 */
+.reject-section {
+  margin-top: 12px;
+  animation: fadeIn 0.2s ease;
+}
+
+.btn-reject-confirm {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  background: rgba(255, 90, 90, 0.2);
+  color: rgba(255, 120, 120, 0.95);
+  border: 1px solid rgba(255, 90, 90, 0.25);
+}
+
+.btn-reject-confirm:hover {
   opacity: 0.85;
 }
 </style>

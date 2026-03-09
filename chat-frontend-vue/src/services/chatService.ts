@@ -7,6 +7,7 @@ import {
   getMcpToolsUrl,
   getRagTagsUrl,
   getResumeChatUrl,
+  getToolSchemasUrl,
 } from '../config/api';
 import {
   ChatRequest,
@@ -22,6 +23,7 @@ import {
   McpTool,
   RagTagsApiResponse,
   TagTreeNode,
+  ToolSchema,
 } from '../types/chat';
 import Cookies from "js-cookie";
 
@@ -84,6 +86,7 @@ export class ChatService {
               const jsonStr = line.slice(6).trim();
               if (jsonStr) {
                 const data: ChatResponse = JSON.parse(jsonStr);
+                console.log('[ChatResponse]', data.status, data);
 
                 onMessage(data);
 
@@ -180,6 +183,7 @@ export class ChatService {
               const jsonStr = line.slice(6).trim();
               if (jsonStr) {
                 const data: ChatResponse = JSON.parse(jsonStr);
+                console.log('[ChatResponse:resume]', data.status, data);
 
                 onMessage(data);
 
@@ -380,6 +384,30 @@ export class ChatService {
     const apiResponse: RagTagsApiResponse = await response.json();
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || 'RAG 태그 목록을 불러오는데 실패했습니다.');
+    }
+
+    return apiResponse.data;
+  }
+
+  async fetchToolSchemas(toolNames?: string[]): Promise<ToolSchema[]> {
+    const url = getToolSchemasUrl();
+    const token = Cookies.get('LOGIN_TOKEN');
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ tool_names: toolNames ?? null }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const apiResponse: ApiResponse<ToolSchema[]> = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || '도구 스키마를 불러오는데 실패했습니다.');
     }
 
     return apiResponse.data;
