@@ -570,6 +570,8 @@ class Orchestrator:
         model_kwargs: dict | None = None,
         # 신규 채팅용 (None이면 resume)
         initial_state: ChatGraphState | None = None,
+        # Fork from checkpoint용
+        checkpoint_id: str | None = None,
         # HITL resume용
         approved: bool | None = None,
         edit_message: str | None = None,
@@ -613,6 +615,9 @@ class Orchestrator:
                     ))
 
                     input_data = {"messages": messages}
+
+                    if checkpoint_id:
+                        logger.info(f"🔀 Fork from checkpoint: {checkpoint_id}, thread={thread_id}")
 
                 else:
                     # --- HITL resume ---
@@ -673,8 +678,11 @@ class Orchestrator:
                     input_data = Command(resume=resume_value)
 
                 # 공통: agent stream 실행
+                configurable = {"thread_id": thread_id}
+                if checkpoint_id:
+                    configurable["checkpoint_id"] = checkpoint_id
                 config = {
-                    "configurable": {"thread_id": thread_id},
+                    "configurable": configurable,
                     "recursion_limit": 100,
                 }
                 context = ChatContext(
