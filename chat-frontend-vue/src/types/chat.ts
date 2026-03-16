@@ -1,7 +1,7 @@
 export interface ChatRequest {
   prompt: string;
   model: string;
-  chat_session_id?: number | null;
+  thread_id?: string | null;
   rag_tags: string[] | null;
 }
 
@@ -80,7 +80,6 @@ export interface ToolSchema {
 export interface ResumeRequest {
   thread_id: string;
   approved: boolean;
-  chat_session_id?: number | null;
   model?: string;
   edit_message?: string;  // 거부 시 에이전트에게 전달할 메시지
   edited_tool_calls?: EditedToolCall[];  // EDIT decision용
@@ -106,7 +105,7 @@ export type ModelType = 'gpt-5-nano' | 'gpt-4' | 'claude-3' | 'gemini-pro';
 
 // API 응답 타입
 export interface SessionData {
-  chat_session_id: number;
+  thread_id: string;
   session_title: string;
   created_at: string;
   updated_at: string;

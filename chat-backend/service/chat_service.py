@@ -1,5 +1,4 @@
 import os
-import uuid
 import logging
 from datetime import datetime
 from typing import Optional
@@ -39,7 +38,7 @@ async def create_chat_title(user_prompt: str) -> Optional[str]:
 
 
 async def create_or_get_session(
-    chat_session_id: int,
+    thread_id: str,
     prompt: str,
 ) -> str:
     """세션 확인/생성 후 thread_id 반환. 새 세션이면 LLM으로 제목 생성."""
@@ -47,7 +46,7 @@ async def create_or_get_session(
     async with AsyncSessionLocal() as db:
         try:
             session_query = select(ChatSession).where(
-                ChatSession.chat_session_id == chat_session_id
+                ChatSession.thread_id == thread_id
             )
             session_result = await db.execute(session_query)
             chat_session = session_result.scalar_one_or_none()
@@ -55,18 +54,16 @@ async def create_or_get_session(
             if chat_session:
                 return chat_session.thread_id
 
-            # 새 세션: thread_id 생성 + LLM으로 제목 생성
-            thread_id = str(uuid.uuid4())
+            # 새 세션: 프론트에서 전달받은 thread_id 사용 + LLM으로 제목 생성
             title = await create_chat_title(prompt)
             new_session = ChatSession(
-                chat_session_id=chat_session_id,
-                session_title=title or prompt[:15] or "새 채팅",
                 thread_id=thread_id,
+                session_title=title or prompt[:15] or "새 채팅",
             )
             db.add(new_session)
             await db.commit()
             await db.refresh(new_session)
-            logger.info(f"✅ 새 세션 생성: session={chat_session_id}, thread={thread_id}")
+            logger.info(f"✅ 새 세션 생성: thread={thread_id}")
             return thread_id
         except Exception as e:
             logger.error(f"❌ 세션 생성/조회 실패: {e}")
@@ -83,18 +80,18 @@ async def get_chat_sessions(
     return result.scalars().all()
 
 async def get_chat_messages(
-        chat_session_id: int,
+        thread_id: str,
         db: AsyncSession,
 ):
     """checkpoint에서 메시지를 추출하여 반환"""
-    # 1. session에서 thread_id 조회
+    # 1. session 존재 확인
     session_query = select(ChatSession).where(
-        ChatSession.chat_session_id == chat_session_id
+        ChatSession.thread_id == thread_id
     )
     session_result = await db.execute(session_query)
     chat_session = session_result.scalar_one_or_none()
 
-    if not chat_session or not chat_session.thread_id:
+    if not chat_session:
         return []
 
     # 2. checkpointer에서 최신 checkpoint 가져오기
@@ -105,7 +102,7 @@ async def get_chat_messages(
         return []
 
     try:
-        config = {"configurable": {"thread_id": chat_session.thread_id}}
+        config = {"configurable": {"thread_id": thread_id}}
         checkpoint_tuple = await checkpointer.aget_tuple(config)
         if not checkpoint_tuple:
             return []
@@ -144,7 +141,7 @@ async def get_chat_messages(
                         "created_at": None,
                     })
 
-        logger.info(f"✅ checkpoint에서 메시지 {len(result)}개 추출: session={chat_session_id}")
+        logger.info(f"✅ checkpoint에서 메시지 {len(result)}개 추출: thread={thread_id}")
         return result
     except Exception as e:
         logger.error(f"❌ checkpoint 메시지 추출 실패: {e}")
@@ -161,30 +158,28 @@ async def get_available_model_list(
 
 
 async def delete_chat_session(
-        chat_session_id: int,
+        thread_id: str,
         db: AsyncSession,
 ):
-    session_query = select(ChatSession).where(ChatSession.chat_session_id == chat_session_id)
+    session_query = select(ChatSession).where(ChatSession.thread_id == thread_id)
     session_result = await db.execute(session_query)
     chat_session = session_result.scalar_one_or_none()
 
     if not chat_session:
         raise ApiException(FailureCode.NOT_FOUND_DATA, "존재하지 않는 채팅 세션입니다")
 
-    # checkpoint 테이블 정리 (thread_id가 있는 경우)
-    if chat_session.thread_id:
-        thread_id = chat_session.thread_id
-        await db.execute(text("DELETE FROM checkpoint_writes WHERE thread_id = :tid"), {"tid": thread_id})
-        await db.execute(text("DELETE FROM checkpoint_blobs WHERE thread_id = :tid"), {"tid": thread_id})
-        await db.execute(text("DELETE FROM checkpoints WHERE thread_id = :tid"), {"tid": thread_id})
-        logger.info(f"🗑️ checkpoint 정리 완료: thread={thread_id}")
+    # checkpoint 테이블 정리
+    await db.execute(text("DELETE FROM checkpoint_writes WHERE thread_id = :tid"), {"tid": thread_id})
+    await db.execute(text("DELETE FROM checkpoint_blobs WHERE thread_id = :tid"), {"tid": thread_id})
+    await db.execute(text("DELETE FROM checkpoints WHERE thread_id = :tid"), {"tid": thread_id})
+    logger.info(f"🗑️ checkpoint 정리 완료: thread={thread_id}")
 
     await db.delete(chat_session)
     await db.commit()
 
 
 async def update_chat_session_title(
-        chat_session_id: int,
+        thread_id: str,
         session_title: str,
         db: AsyncSession,
 ):
@@ -192,7 +187,7 @@ async def update_chat_session_title(
     if not normalized_title:
         raise ApiException(FailureCode.BAD_REQUEST, "세션 제목은 비어있을 수 없습니다")
 
-    session_query = select(ChatSession).where(ChatSession.chat_session_id == chat_session_id)
+    session_query = select(ChatSession).where(ChatSession.thread_id == thread_id)
     session_result = await db.execute(session_query)
     chat_session = session_result.scalar_one_or_none()
 

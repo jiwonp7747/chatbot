@@ -35,23 +35,23 @@ class ChatSessionRouterTests(unittest.TestCase):
     def test_delete_session_success(self):
         called = {}
 
-        async def fake_delete_chat_session(chat_session_id, db):
-            called["chat_session_id"] = chat_session_id
+        async def fake_delete_chat_session(thread_id, db):
+            called["thread_id"] = thread_id
 
         chat_service.delete_chat_session = fake_delete_chat_session
 
-        response = self.client.delete("/chat/session/101")
+        response = self.client.delete("/chat/session/test-thread-id")
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertTrue(body["success"])
         self.assertEqual(body["status_code"], 200)
-        self.assertEqual(called["chat_session_id"], 101)
+        self.assertEqual(called["thread_id"], "test-thread-id")
 
     def test_update_session_title_success(self):
-        async def fake_update_chat_session_title(chat_session_id, session_title, db):
+        async def fake_update_chat_session_title(thread_id, session_title, db):
             return {
-                "chat_session_id": chat_session_id,
+                "thread_id": thread_id,
                 "session_title": session_title,
                 "created_at": "2026-02-13T00:00:00",
                 "updated_at": "2026-02-13T00:00:00",
@@ -60,7 +60,7 @@ class ChatSessionRouterTests(unittest.TestCase):
         chat_service.update_chat_session_title = fake_update_chat_session_title
 
         response = self.client.patch(
-            "/chat/session/101/title",
+            "/chat/session/test-thread-id/title",
             json={"session_title": "새 제목"},
         )
 
@@ -68,17 +68,17 @@ class ChatSessionRouterTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["success"])
         self.assertEqual(body["status_code"], 200)
-        self.assertEqual(body["data"]["chat_session_id"], 101)
+        self.assertEqual(body["data"]["thread_id"], "test-thread-id")
         self.assertEqual(body["data"]["session_title"], "새 제목")
 
     def test_update_session_title_not_found(self):
-        async def fake_update_chat_session_title(chat_session_id, session_title, db):
+        async def fake_update_chat_session_title(thread_id, session_title, db):
             raise ApiException(FailureCode.NOT_FOUND_DATA, "존재하지 않는 채팅 세션입니다")
 
         chat_service.update_chat_session_title = fake_update_chat_session_title
 
         response = self.client.patch(
-            "/chat/session/999/title",
+            "/chat/session/test-thread-id/title",
             json={"session_title": "없는 세션"},
         )
 

@@ -12,7 +12,7 @@ class StreamStatus(str, Enum):
     CONFIRM = "confirm"        # HITL 도구 실행 확인 대기
 
 class ChatRequest(BaseModel):
-    chat_session_id: Optional[int]
+    thread_id: Optional[str] = None
     prompt: str
     model: Optional[str] = "gpt-5.1-mini"
     rag_tags: Optional[List[str]] = Field(default=[], description="RAG tag-scoped 검색에 사용할 태그 목록")
@@ -58,7 +58,6 @@ class ResumeRequest(BaseModel):
     """HITL 재개 요청"""
     thread_id: str
     approved: bool
-    chat_session_id: Optional[int] = None
     model: Optional[str] = None
     edit_message: Optional[str] = None  # 거부 시 에이전트에게 전달할 메시지
     edited_tool_calls: Optional[List[EditedToolCall]] = None  # EDIT decision용

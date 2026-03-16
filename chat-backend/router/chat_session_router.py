@@ -21,13 +21,13 @@ async def read_sessions(
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, sessions)
 
 @router.get(
-    "/message/{chat_session_id}",
+    "/message/{thread_id}",
 )
 async def read_messages(
-    chat_session_id: int,
+    thread_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    messages = await chat_service.get_chat_messages(chat_session_id, db)
+    messages = await chat_service.get_chat_messages(thread_id, db)
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, messages)
 
 @router.get(
@@ -40,23 +40,23 @@ async def available_model_list(
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, model_types)
 
 
-@router.delete("/session/{chat_session_id}")
+@router.delete("/session/{thread_id}")
 async def delete_session(
-        chat_session_id: int,
+        thread_id: str,
         db: AsyncSession = Depends(get_db),
 ):
-    await chat_service.delete_chat_session(chat_session_id, db)
+    await chat_service.delete_chat_session(thread_id, db)
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE)
 
 
-@router.patch("/session/{chat_session_id}/title")
+@router.patch("/session/{thread_id}/title")
 async def update_session_title(
-        chat_session_id: int,
+        thread_id: str,
         request: ChatSessionTitleUpdateRequest,
         db: AsyncSession = Depends(get_db),
 ):
     updated_session = await chat_service.update_chat_session_title(
-        chat_session_id=chat_session_id,
+        thread_id=thread_id,
         session_title=request.session_title,
         db=db,
     )

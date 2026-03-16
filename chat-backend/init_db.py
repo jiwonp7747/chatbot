@@ -25,18 +25,35 @@ async def create_tables():
 
 
 async def migrate_to_checkpoint_messages(eng):
-    """chat_message → checkpoint 마이그레이션: thread_id 컬럼 추가 + chat_message 테이블 DROP"""
+    """chat_session PK를 thread_id로 변경 + chat_message 테이블 DROP"""
     async with eng.begin() as conn:
-        # 1. chat_session에 thread_id 컬럼 추가 (이미 있으면 무시)
-        await conn.execute(text("""
-            ALTER TABLE chat_session ADD COLUMN IF NOT EXISTS thread_id VARCHAR UNIQUE
-        """))
-        print("✅ chat_session.thread_id 컬럼 추가 완료")
+        # 기존 chat_session 데이터 삭제 (기존 데이터 폐기)
+        await conn.execute(text("DELETE FROM chat_session"))
+        print("🗑️ 기존 chat_session 데이터 삭제")
 
-        # 2. chat_message 테이블 DROP (존재하면)
+        # chat_session_id 컬럼이 PK인 경우 PK 변경
+        # 기존 PK 제거 + chat_session_id 컬럼 삭제
         await conn.execute(text("""
-            DROP TABLE IF EXISTS chat_message CASCADE
+            ALTER TABLE chat_session DROP CONSTRAINT IF EXISTS chat_session_pkey
         """))
+        await conn.execute(text("""
+            ALTER TABLE chat_session DROP COLUMN IF EXISTS chat_session_id
+        """))
+
+        # thread_id 컬럼 추가 (없으면) 후 PK로 설정
+        await conn.execute(text("""
+            ALTER TABLE chat_session ADD COLUMN IF NOT EXISTS thread_id VARCHAR
+        """))
+        await conn.execute(text("""
+            ALTER TABLE chat_session DROP CONSTRAINT IF EXISTS chat_session_thread_id_key
+        """))
+        await conn.execute(text("""
+            ALTER TABLE chat_session ADD CONSTRAINT chat_session_pkey PRIMARY KEY (thread_id)
+        """))
+        print("✅ chat_session PK → thread_id 변경 완료")
+
+        # chat_message 테이블 DROP
+        await conn.execute(text("DROP TABLE IF EXISTS chat_message CASCADE"))
         print("✅ chat_message 테이블 DROP 완료")
 
 

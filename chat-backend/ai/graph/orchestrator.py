@@ -564,7 +564,6 @@ class Orchestrator:
         result: StreamResult,
         *,
         # runtime config (state가 아닌 configurable로 전달)
-        chat_session_id: int | None = None,
         token: str | None = None,
         # 모델 정보 (model_resolver에서 생성)
         model_string: str | None = None,
@@ -587,8 +586,6 @@ class Orchestrator:
         with tracer.start_as_current_span(span_name) as span:
             span.set_attribute("thread.id", thread_id)
 
-            if chat_session_id is not None:
-                span.set_attribute("session.id", str(chat_session_id))
             if not is_new_chat:
                 span.set_attribute("hitl.approved", approved)
                 span.set_attribute("model", model_string)
@@ -681,7 +678,7 @@ class Orchestrator:
                     "recursion_limit": 100,
                 }
                 context = ChatContext(
-                    chat_session_id=chat_session_id,
+                    thread_id=thread_id,
                     token=token,
                 )
 

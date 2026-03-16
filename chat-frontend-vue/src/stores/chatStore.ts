@@ -39,7 +39,7 @@ interface ChatState {
   streamingStatusMap: Record<string, 'progress' | 'streaming' | 'confirm'>;
   selectedRagTags: string[];
   pendingConfirm: PendingConfirm | null;
-  subProgressMap: Record<number, SubProgressEntry[]>;
+  subProgressMap: Record<string, SubProgressEntry[]>;
 }
 
 export const useChatStore = defineStore('chat', {
@@ -145,7 +145,7 @@ export const useChatStore = defineStore('chat', {
 
       if (!targetSessionId) {
         const newSession: ChatSession = {
-          id: Date.now().toString(),
+          id: crypto.randomUUID(),
           title: content.slice(0, 30) || '새 채팅',
           messages: [userMessage],
           model: this.selectedModel,
@@ -182,7 +182,7 @@ export const useChatStore = defineStore('chat', {
         {
           prompt: content,
           model: modelToUse,
-          chat_session_id: sessionId ? parseInt(sessionId) : null,
+          thread_id: sessionId || null,
           rag_tags: this.selectedRagTags
         },
         (response: ChatResponse) => {
@@ -190,11 +190,10 @@ export const useChatStore = defineStore('chat', {
             this.streamingStatusMap[sessionId] = 'progress';
             this.streamingContentMap[sessionId] = response.content;
           } else if (response.status === 'sub_progress') {
-            const numericId = parseInt(sessionId);
-            if (!this.subProgressMap[numericId]) {
-              this.subProgressMap[numericId] = [];
+            if (!this.subProgressMap[sessionId]) {
+              this.subProgressMap[sessionId] = [];
             }
-            this.subProgressMap[numericId].push({
+            this.subProgressMap[sessionId].push({
               content: response.content,
               tools: response.sub_tools || [],
               parallel: response.parallel || false,
@@ -208,9 +207,8 @@ export const useChatStore = defineStore('chat', {
             this.streamingStatusMap[sessionId] = 'streaming';
 
             // Clear sub_progress on first streaming chunk
-            const numericId = parseInt(sessionId);
-            if (isTransitionFromProgress && this.subProgressMap[numericId]) {
-              delete this.subProgressMap[numericId];
+            if (isTransitionFromProgress && this.subProgressMap[sessionId]) {
+              delete this.subProgressMap[sessionId];
             }
 
             if (isTransitionFromProgress) {
@@ -242,7 +240,7 @@ export const useChatStore = defineStore('chat', {
 
             delete this.streamingContentMap[sessionId];
             delete this.streamingStatusMap[sessionId];
-            delete this.subProgressMap[parseInt(sessionId)];
+            delete this.subProgressMap[sessionId];
             this.streamingSessionId = null;
           } else if (response.status === 'confirm') {
             this.streamingStatusMap[sessionId] = 'confirm';
@@ -283,7 +281,7 @@ export const useChatStore = defineStore('chat', {
 
             delete this.streamingContentMap[sessionId];
             delete this.streamingStatusMap[sessionId];
-            delete this.subProgressMap[parseInt(sessionId)];
+            delete this.subProgressMap[sessionId];
             this.streamingSessionId = null;
           }
         },
@@ -309,7 +307,7 @@ export const useChatStore = defineStore('chat', {
 
           delete this.streamingContentMap[sessionId];
           delete this.streamingStatusMap[sessionId];
-          delete this.subProgressMap[parseInt(sessionId)];
+          delete this.subProgressMap[sessionId];
           this.streamingSessionId = null;
         },
         () => {
@@ -364,11 +362,10 @@ export const useChatStore = defineStore('chat', {
         this.streamingStatusMap[sessionId] = 'progress';
         this.streamingContentMap[sessionId] = response.content;
       } else if (response.status === 'sub_progress') {
-        const numericId = parseInt(sessionId);
-        if (!this.subProgressMap[numericId]) {
-          this.subProgressMap[numericId] = [];
+        if (!this.subProgressMap[sessionId]) {
+          this.subProgressMap[sessionId] = [];
         }
-        this.subProgressMap[numericId].push({
+        this.subProgressMap[sessionId].push({
           content: response.content,
           tools: response.sub_tools || [],
           parallel: response.parallel || false,
@@ -382,9 +379,8 @@ export const useChatStore = defineStore('chat', {
         this.streamingStatusMap[sessionId] = 'streaming';
 
         // Clear sub_progress on first streaming chunk
-        const numericId = parseInt(sessionId);
-        if (isTransitionFromProgress && this.subProgressMap[numericId]) {
-          delete this.subProgressMap[numericId];
+        if (isTransitionFromProgress && this.subProgressMap[sessionId]) {
+          delete this.subProgressMap[sessionId];
         }
 
         if (isTransitionFromProgress) {
@@ -434,7 +430,7 @@ export const useChatStore = defineStore('chat', {
 
         delete this.streamingContentMap[sessionId];
         delete this.streamingStatusMap[sessionId];
-        delete this.subProgressMap[parseInt(sessionId)];
+        delete this.subProgressMap[sessionId];
         this.streamingSessionId = null;
       } else if (response.status === 'error') {
         const errorMessage: Message = {
@@ -457,7 +453,7 @@ export const useChatStore = defineStore('chat', {
 
         delete this.streamingContentMap[sessionId];
         delete this.streamingStatusMap[sessionId];
-        delete this.subProgressMap[parseInt(sessionId)];
+        delete this.subProgressMap[sessionId];
         this.streamingSessionId = null;
       }
     },
@@ -477,7 +473,6 @@ export const useChatStore = defineStore('chat', {
           thread_id: threadId,
           approved: true,
           model: modelToUse,
-          chat_session_id: parseInt(sessionId) || null,
         },
         (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
         (error: Error) => {
@@ -568,7 +563,6 @@ export const useChatStore = defineStore('chat', {
           thread_id: threadId,
           approved: true,
           model: modelToUse,
-          chat_session_id: parseInt(sessionId) || null,
           edited_tool_calls: editedToolCalls,
         },
         (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
@@ -613,7 +607,6 @@ export const useChatStore = defineStore('chat', {
           thread_id: threadId,
           approved: false,
           model: modelToUse,
-          chat_session_id: parseInt(sessionId) || null,
           edit_message: editMessage,
         },
         (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
@@ -653,7 +646,6 @@ export const useChatStore = defineStore('chat', {
           thread_id: threadId,
           approved: false,
           model: modelToUse,
-          chat_session_id: parseInt(sessionId) || null,
         },
         (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
         (error: Error) => {

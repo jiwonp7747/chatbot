@@ -3,9 +3,8 @@ from datetime import datetime
 from typing import Optional
 
 class ChatSessionResponse(BaseModel):
+    thread_id: str
     session_title: Optional[str] = None
-    chat_session_id: int
-    thread_id: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime]
 

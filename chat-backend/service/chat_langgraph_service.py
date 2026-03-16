@@ -124,7 +124,6 @@ async def process_chat(
             async for sse_msg in orchestrator.run(
                 thread_id=request.thread_id,
                 result=result,
-                chat_session_id=request.chat_session_id,
                 token=auth_header,
                 model_string=resolved_model.model_string,
                 model_kwargs=resolved_model.model_kwargs,
@@ -151,7 +150,7 @@ async def process_chat(
 
             user_chat_created_at = datetime.utcnow()
             # 세션 생성/조회하여 thread_id 획득
-            thread_id = await create_or_get_session(request.chat_session_id, request.prompt)
+            thread_id = await create_or_get_session(request.thread_id, request.prompt)
 
             resolved_model = await resolve_model_config(db, request.model)
             initial_state = _build_initial_state(
@@ -165,7 +164,6 @@ async def process_chat(
             async for sse_msg in orchestrator.run(
                 thread_id=thread_id,
                 result=result,
-                chat_session_id=request.chat_session_id,
                 token=auth_header,
                 model_string=resolved_model.model_string,
                 model_kwargs=resolved_model.model_kwargs,

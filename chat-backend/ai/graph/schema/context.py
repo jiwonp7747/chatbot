@@ -10,5 +10,5 @@ from typing import Optional
 @dataclass
 class ChatContext:
     """채팅 요청의 런타임 컨텍스트"""
-    chat_session_id: Optional[int] = None
+    thread_id: Optional[str] = None
     token: Optional[str] = None

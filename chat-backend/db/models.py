@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, BigInteger, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger
 from sqlalchemy.sql import func
 
 from db.database import Base
@@ -6,10 +6,8 @@ from db.database import Base
 class ChatSession(Base):
     __tablename__ = "chat_session"
 
-    # BigInteger 사용, DB에서 Identity로 자동 생성되므로 server_default 등은 생략 가능
-    chat_session_id = Column(BigInteger, primary_key=True, index=True)
+    thread_id = Column(String, primary_key=True, index=True)
     session_title = Column(String, nullable=True)
-    thread_id = Column(String, nullable=True, unique=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

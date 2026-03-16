@@ -52,7 +52,7 @@ export class ChatService {
         body: JSON.stringify({
           prompt: request.prompt,
           model: request.model,
-          chat_session_id: request.chat_session_id ?? null,
+          thread_id: request.thread_id ?? null,
           rag_tags: request.rag_tags ?? null
         }),
         signal: this.abortController.signal
@@ -241,7 +241,7 @@ export class ChatService {
       }
 
       return apiResponse.data.map(session => ({
-        id: session.chat_session_id.toString(),
+        id: session.thread_id,
         title: session.session_title,
         messages: [],
         model: 'gpt-5-nano' as const,
@@ -334,7 +334,7 @@ export class ChatService {
 
     const updated = apiResponse.data;
     return {
-      id: updated.chat_session_id.toString(),
+      id: updated.thread_id,
       title: updated.session_title,
       messages: [],
       model: 'gpt-5-nano' as const,
