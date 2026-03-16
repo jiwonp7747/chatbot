@@ -5,7 +5,7 @@ from typing import List
 from common.response.code import SuccessCode
 from common.response.response_template import ResponseTemplate
 from db.database import get_db
-from schema.chat_session_schema import ChatSessionResponse, ChatSessionTitleUpdateRequest
+from schema.chat_session_schema import ChatSessionResponse, ChatSessionTitleUpdateRequest, ToolResultResponse
 import service.chat_service as chat_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -29,6 +29,16 @@ async def read_messages(
 ):
     messages = await chat_service.get_chat_messages(thread_id, db)
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, messages)
+
+@router.get(
+    "/tool-result/{thread_id}/{tool_call_id}",
+)
+async def read_tool_result(
+    thread_id: str,
+    tool_call_id: str,
+):
+    result = await chat_service.get_tool_result(thread_id, tool_call_id)
+    return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, result)
 
 @router.get(
     "/model"

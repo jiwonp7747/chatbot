@@ -38,26 +38,64 @@ class LargeDataMiddleware(FilesystemMiddleware):
         result = handler(request)
 
         if isinstance(result, ToolMessage):
-            # artifact는 LLM 컨텍스트에 포함되지 않으므로 크기 체크 대상에서 제외
-            content_str = str(result.content)
-            if len(content_str) > self.threshold:
-                resolved = self._get_backend(request.runtime)
+            artifact = result.artifact
+            additional_kwargs = dict(result.additional_kwargs) if result.additional_kwargs else {}
 
-                tool_name = request.tool_call["name"]
-                tool_call_id = request.tool_call["id"]
-                thread_id = request.runtime.config["configurable"]["thread_id"]
-                output_path = f"/data/{thread_id}/{tool_name}_{tool_call_id}.jsonl"
+            if artifact is not None:
+                artifact_str = str(artifact)
+                artifact_size = len(artifact_str)
 
-                resolved.write(output_path, content_str)
+                if artifact_size > self.threshold:
+                    # artifact가 크면 파일에 저장
+                    resolved = self._get_backend(request.runtime)
+                    tool_name = request.tool_call["name"]
+                    tool_call_id = request.tool_call["id"]
+                    thread_id = request.runtime.config["configurable"]["thread_id"]
+                    output_path = f"/data/{thread_id}/{tool_name}_{tool_call_id}.jsonl"
 
-                logger.info(f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 `{output_path}`에 저장했습니다.")
-                return result.model_copy(update={
-                    "content": (
-                        f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 "
-                        f"`{output_path}`에 저장했습니다. "
-                        "해당 파일을 분석하여 작업을 계속하세요."
-                    )
-                })
+                    resolved.write(output_path, artifact_str)
+                    logger.info(f"`{tool_name}` 도구의 artifact가 너무 크기 때문에 `{output_path}`에 저장했습니다.")
+
+                    additional_kwargs["data_ref_type"] = "file"
+                    additional_kwargs["file_path"] = output_path
+                    return result.model_copy(update={
+                        "artifact": None,
+                        "additional_kwargs": additional_kwargs,
+                        "content": (
+                            f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 "
+                            f"`{output_path}`에 저장했습니다. "
+                            "해당 파일을 분석하여 작업을 계속하세요."
+                        ),
+                    })
+                else:
+                    # artifact가 작으면 checkpoint에 유지
+                    additional_kwargs["data_ref_type"] = "artifact"
+                    return result.model_copy(update={
+                        "additional_kwargs": additional_kwargs,
+                    })
+            else:
+                # artifact 없음: 기존 content 크기 체크 로직
+                content_str = str(result.content)
+                if len(content_str) > self.threshold:
+                    resolved = self._get_backend(request.runtime)
+                    tool_name = request.tool_call["name"]
+                    tool_call_id = request.tool_call["id"]
+                    thread_id = request.runtime.config["configurable"]["thread_id"]
+                    output_path = f"/data/{thread_id}/{tool_name}_{tool_call_id}.jsonl"
+
+                    resolved.write(output_path, content_str)
+                    logger.info(f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 `{output_path}`에 저장했습니다.")
+
+                    additional_kwargs["data_ref_type"] = "file"
+                    additional_kwargs["file_path"] = output_path
+                    return result.model_copy(update={
+                        "additional_kwargs": additional_kwargs,
+                        "content": (
+                            f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 "
+                            f"`{output_path}`에 저장했습니다. "
+                            "해당 파일을 분석하여 작업을 계속하세요."
+                        ),
+                    })
 
         return result
 
