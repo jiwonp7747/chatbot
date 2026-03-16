@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     prompt: str
     model: Optional[str] = "gpt-5.1-mini"
     rag_tags: Optional[List[str]] = Field(default=[], description="RAG tag-scoped 검색에 사용할 태그 목록")
+    checkpoint_id: Optional[str] = Field(default=None, description="Fork 시작점 checkpoint_id — 지정 시 해당 시점에서 분기")
 
 class HitlToolCall(BaseModel):
     """HITL interrupt된 개별 도구 호출 정보"""

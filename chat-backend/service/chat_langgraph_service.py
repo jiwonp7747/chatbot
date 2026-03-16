@@ -168,6 +168,7 @@ async def process_chat(
                 model_string=resolved_model.model_string,
                 model_kwargs=resolved_model.model_kwargs,
                 initial_state=initial_state,
+                checkpoint_id=request.checkpoint_id,
             ):
                 yield sse_msg
 
