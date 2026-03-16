@@ -42,6 +42,8 @@ class ChatResponse(BaseModel):
     agent_name: Optional[str] = None
     sub_tools: Optional[List[str]] = None
     parallel: Optional[bool] = None
+    # 도구 결과 artifact (테이블 등 구조화된 데이터)
+    artifact: Optional[dict] = None
 
 class EditedToolCall(BaseModel):
     """EDIT decision용 수정된 도구 호출"""

@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -18,6 +19,8 @@ from db.model_type_migration import ensure_model_type_schema
 from mcp_hub import get_mcp_registry
 from config.telemetry import init_telemetry
 
+from ai.checkpointer import init_checkpointer, close_checkpointer
+
 
 # --- [Lifespan] 서버 시작/종료 시 실행될 로직 ---
 @asynccontextmanager
@@ -33,6 +36,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"❌ 데이터베이스 연결 실패: {e}")
         # DB 연결 실패 시 서버를 켜지 않으려면 여기서 raise e
+
+    # checkpointer 초기화
+    await init_checkpointer(type=os.getenv("CHECKPOINTER_TYPE", "memory"))
 
     await load_system_prompts()
 
@@ -50,6 +56,8 @@ async def lifespan(app: FastAPI):
     yield  # -------------------- [애플리케이션 가동 중] --------------------
 
     print("🛑 서버 종료 프로세스 가동...")
+    # checkpointer 종료
+    await close_checkpointer()
 
     # MCP Registry 종료
     try:

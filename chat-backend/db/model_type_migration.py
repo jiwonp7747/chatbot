@@ -31,6 +31,7 @@ async def ensure_model_type_schema(engine: AsyncEngine) -> None:
                 WHEN lower(model_type) LIKE 'gemini%' THEN 'GEMINI'
                 WHEN lower(model_type) LIKE 'oci%' THEN 'OCI'
                 WHEN lower(model_type) LIKE 'local%' OR lower(model_type) LIKE 'ollama%' OR lower(model_type) LIKE 'llama%' THEN 'LOCAL'
+                WHEN lower(model_type) LIKE 'or-%' OR lower(api_model) LIKE '%/%' THEN 'OPENROUTER'
                 ELSE 'OPENAI'
             END
         """))

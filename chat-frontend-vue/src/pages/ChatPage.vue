@@ -42,19 +42,50 @@
         </div>
 
         <!-- Visible entries -->
-        <div
+        <template
           v-for="(entry, idx) in group.visibleEntries"
           :key="idx"
-          class="sub-progress-item"
-          :class="getEntryStatus(entry.content)"
         >
-          <span class="sub-progress-indicator">
-            <span v-if="getEntryStatus(entry.content) === 'calling'" class="indicator-dot"></span>
-            <span v-else-if="getEntryStatus(entry.content) === 'completed'" class="indicator-check">✓</span>
-            <span v-else class="indicator-fail">✗</span>
-          </span>
-          <span class="sub-progress-content">{{ entry.content }}</span>
-        </div>
+          <div
+            class="sub-progress-item"
+            :class="[getEntryStatus(entry.content), { 'has-artifact': entry.artifact?.type === 'table' }]"
+            @click="entry.artifact?.type === 'table' ? toggleArtifact(group.agent, idx) : undefined"
+          >
+            <span class="sub-progress-indicator">
+              <span v-if="getEntryStatus(entry.content) === 'calling'" class="indicator-dot"></span>
+              <span v-else-if="getEntryStatus(entry.content) === 'completed'" class="indicator-check">✓</span>
+              <span v-else class="indicator-fail">✗</span>
+            </span>
+            <span class="sub-progress-content">{{ entry.content }}</span>
+            <span v-if="entry.artifact?.type === 'table'" class="artifact-badge">
+              {{ isArtifactExpanded(group.agent, idx) ? '▼' : '▶' }} {{ entry.artifact.rows?.length ?? 0 }}건
+            </span>
+          </div>
+          <!-- 클릭 시 펼쳐지는 Artifact 테이블 -->
+          <div
+            v-if="isArtifactExpanded(group.agent, idx) && entry.artifact?.type === 'table' && entry.artifact.columns?.length"
+            class="artifact-table-wrap"
+          >
+            <div v-if="entry.artifact.summary" class="artifact-summary">{{ entry.artifact.summary }}</div>
+            <div class="artifact-table-scroll">
+              <table class="artifact-table">
+                <thead>
+                  <tr>
+                    <th v-for="col in entry.artifact.columns" :key="col">{{ col }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, rIdx) in entry.artifact.rows?.slice(0, artifactRowLimit)" :key="rIdx">
+                    <td v-for="(cell, cIdx) in row" :key="cIdx">{{ cell ?? '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="(entry.artifact.rows?.length ?? 0) > artifactRowLimit" class="artifact-more">
+              ... 외 {{ (entry.artifact.rows?.length ?? 0) - artifactRowLimit }}건
+            </div>
+          </div>
+        </template>
       </div>
     </div>
     <!-- HITL 도구 실행 확인 카드 -->
@@ -80,19 +111,30 @@
         </div>
         <div class="confirm-actions">
           <button class="btn-approve" @click="store.approveToolCall()">승인</button>
-          <button class="btn-edit" @click="store.toggleEditMode()">수정</button>
+          <button class="btn-edit" @click="store.toggleEditMode()">인자 수정</button>
+          <button class="btn-message-edit" @click="store.toggleMessageEditMode()">메시지 수정</button>
           <button class="btn-reject" @click="store.toggleRejectMode()">거부</button>
         </div>
-        <!-- 거부 모드: 메시지 입력 -->
-        <template v-if="store.pendingConfirm.isRejecting">
+        <!-- 메시지 수정 모드: 지시사항 입력 후 재시도 -->
+        <template v-if="store.pendingConfirm.isMessageEditing">
           <div class="reject-section">
             <textarea
-              v-model="store.pendingConfirm.rejectMessage"
+              v-model="store.pendingConfirm.editMessage"
               class="edit-textarea"
               rows="2"
-              placeholder="거부 사유 또는 지시사항 (선택, 예: 다른 LOT로 조회해줘)"
+              placeholder="지시사항을 입력하세요 (예: 다른 LOT로 조회해줘, 기간을 48시간으로 변경)"
               spellcheck="false"
             />
+            <div class="confirm-actions">
+              <button class="btn-message-edit-confirm" @click="store.submitMessageEdit()">수정 실행</button>
+              <button class="btn-cancel" @click="store.toggleMessageEditMode()">취소</button>
+            </div>
+          </div>
+        </template>
+        <!-- 거부 확인 -->
+        <template v-if="store.pendingConfirm.isRejecting">
+          <div class="reject-section">
+            <p class="reject-confirm-text">도구 실행을 거부하시겠습니까?</p>
             <div class="confirm-actions">
               <button class="btn-reject-confirm" @click="store.submitReject()">거부 확인</button>
               <button class="btn-cancel" @click="store.toggleRejectMode()">취소</button>
@@ -235,6 +277,25 @@ import { useChatStore } from '../stores/chatStore';
 import type { ChatSession, ModelType, JsonSchemaProperty, ToolSchema } from '../types/chat';
 
 const store = useChatStore();
+const artifactRowLimit = 50;
+
+// Artifact 펼침/접힘 상태
+const expandedArtifacts = ref<Set<string>>(new Set());
+
+function toggleArtifact(agent: string, idx: number) {
+  const key = `${agent}-${idx}`;
+  if (expandedArtifacts.value.has(key)) {
+    expandedArtifacts.value.delete(key);
+  } else {
+    expandedArtifacts.value.add(key);
+  }
+  // Set을 새로 할당하여 Vue reactivity 트리거
+  expandedArtifacts.value = new Set(expandedArtifacts.value);
+}
+
+function isArtifactExpanded(agent: string, idx: number): boolean {
+  return expandedArtifacts.value.has(`${agent}-${idx}`);
+}
 
 const props = defineProps<{
   session: ChatSession;
@@ -657,6 +718,7 @@ watch(
 
 .btn-approve,
 .btn-edit,
+.btn-message-edit,
 .btn-reject,
 .btn-cancel {
   padding: 8px 20px;
@@ -679,6 +741,12 @@ watch(
   border: 1px solid rgba(255, 200, 60, 0.2);
 }
 
+.btn-message-edit {
+  background: rgba(100, 180, 255, 0.15);
+  color: rgba(120, 190, 255, 0.95);
+  border: 1px solid rgba(100, 180, 255, 0.2);
+}
+
 .btn-reject,
 .btn-cancel {
   background: rgba(255, 255, 255, 0.08);
@@ -688,6 +756,7 @@ watch(
 
 .btn-approve:hover,
 .btn-edit:hover,
+.btn-message-edit:hover,
 .btn-reject:hover,
 .btn-cancel:hover {
   opacity: 0.85;
@@ -856,6 +925,29 @@ watch(
   animation: fadeIn 0.2s ease;
 }
 
+.btn-message-edit-confirm {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  background: rgba(100, 180, 255, 0.2);
+  color: rgba(120, 190, 255, 0.95);
+  border: 1px solid rgba(100, 180, 255, 0.25);
+}
+
+.btn-message-edit-confirm:hover {
+  opacity: 0.85;
+}
+
+.reject-confirm-text {
+  color: var(--text-2);
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+
 .btn-reject-confirm {
   padding: 8px 20px;
   border-radius: 8px;
@@ -871,5 +963,86 @@ watch(
 
 .btn-reject-confirm:hover {
   opacity: 0.85;
+}
+
+/* ── Artifact 클릭 가능 항목 ── */
+.sub-progress-item.has-artifact {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  transition: background 0.15s;
+}
+
+.sub-progress-item.has-artifact:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.artifact-badge {
+  font-size: 10px;
+  color: var(--text-2, rgba(255,255,255,0.35));
+  margin-left: auto;
+  padding-left: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sub-progress-item.has-artifact:hover .artifact-badge {
+  color: var(--text-1, rgba(255,255,255,0.6));
+}
+
+/* ── Artifact 테이블 ── */
+.artifact-table-wrap {
+  margin: 4px 0 6px 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.artifact-summary {
+  font-size: 11px;
+  color: var(--text-2, rgba(255,255,255,0.4));
+  margin-bottom: 4px;
+}
+
+.artifact-table-scroll {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+}
+
+.artifact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.artifact-table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2, rgba(255,255,255,0.5));
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+  letter-spacing: 0.02em;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.artifact-table td {
+  padding: 5px 10px;
+  color: var(--text-1, rgba(255,255,255,0.7));
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.artifact-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.artifact-more {
+  font-size: 10px;
+  color: var(--text-2, rgba(255,255,255,0.3));
+  text-align: center;
+  padding: 4px 0;
+  font-style: italic;
 }
 </style>

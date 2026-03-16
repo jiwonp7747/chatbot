@@ -17,8 +17,11 @@ from langchain_core.tools import tool
 FAB_TRACE_API_URL = os.getenv("FAB_TRACE_API_URL", "http://localhost:8080")
 
 
-def _format_response(result: dict, max_rows: int = 20) -> str:
-    """API 응답을 에이전트가 읽기 좋은 텍스트로 포맷팅"""
+def _format_content(result: dict, max_rows: int = 5) -> str:
+    """API 응답을 LLM이 읽을 요약 텍스트로 변환 (데이터는 상위 몇 건만 포함)"""
+    if "error" in result:
+        return result["error"]
+
     summary = result.get("summary", "")
     meta = result.get("meta", {})
     data = result.get("data", [])
@@ -33,42 +36,91 @@ def _format_response(result: dict, max_rows: int = 20) -> str:
         parts.append(f"[메타] 총 {total}건, 조회 {qtime:.0f}ms")
 
     if isinstance(data, list):
-        if len(data) > max_rows:
-            parts.append(f"[데이터] 상위 {max_rows}건 (전체 {len(data)}건):")
+        if data:
+            parts.append(f"[데이터] 전체 {len(data)}건 중 상위 {min(max_rows, len(data))}건:")
             parts.append(json.dumps(data[:max_rows], ensure_ascii=False, default=str, indent=2))
+            if len(data) > max_rows:
+                parts.append(f"(나머지 {len(data) - max_rows}건은 artifact 테이블 참조)")
         else:
-            parts.append(f"[데이터] {len(data)}건:")
-            parts.append(json.dumps(data, ensure_ascii=False, default=str, indent=2))
+            parts.append("[데이터] 0건")
     elif isinstance(data, dict):
         parts.append("[데이터]")
         parts.append(json.dumps(data, ensure_ascii=False, default=str, indent=2))
 
-    return "\n".join(parts)
+    return "\n".join(parts) if parts else "결과 없음"
 
 
-async def _call_api(path: str, params: dict | None = None) -> str:
-    """Fab Trace API 공통 호출"""
+def _build_artifact(result: dict) -> dict:
+    """API 응답에서 프론트엔드 테이블용 artifact 생성"""
+    if "error" in result:
+        return {}
+
+    data = result.get("data", [])
+    meta = result.get("meta", {})
+    summary = result.get("summary", "")
+
+    if isinstance(data, list) and data:
+        if isinstance(data[0], dict):
+            columns = list(data[0].keys())
+            rows = [[item.get(col) for col in columns] for item in data]
+        else:
+            columns = ["value"]
+            rows = [[item] for item in data]
+        return {
+            "type": "table",
+            "columns": columns,
+            "rows": rows,
+            "summary": summary,
+            "meta": meta,
+        }
+    elif isinstance(data, dict):
+        columns = list(data.keys())
+        rows = [list(data.values())]
+        return {
+            "type": "table",
+            "columns": columns,
+            "rows": rows,
+            "summary": summary,
+            "meta": meta,
+        }
+
+    return {"type": "table", "columns": [], "rows": [], "summary": summary, "meta": meta}
+
+
+async def _call_api_raw(path: str, params: dict | None = None) -> dict:
+    """Fab Trace API 공통 호출 — raw dict 반환"""
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(f"{FAB_TRACE_API_URL}{path}", params=params)
             response.raise_for_status()
-        return _format_response(response.json())
-
+        return response.json()
     except httpx.ConnectError:
-        return "Fab Trace API 서버에 연결할 수 없습니다."
+        return {"error": "Fab Trace API 서버에 연결할 수 없습니다."}
     except httpx.HTTPStatusError as e:
-        return f"API 오류 (HTTP {e.response.status_code}): {e.response.text[:200]}"
+        return {"error": f"API 오류 (HTTP {e.response.status_code}): {e.response.text[:200]}"}
     except Exception as e:
-        return f"API 호출 실패: {str(e)}"
+        return {"error": f"API 호출 실패: {str(e)}"}
+
+
+async def _call_api(path: str, params: dict | None = None) -> str:
+    """Fab Trace API 공통 호출 — 하위호환용 (str 반환)"""
+    result = await _call_api_raw(path, params)
+    return _format_content(result)
+
+
+async def _call_api_with_artifact(path: str, params: dict | None = None) -> tuple[str, dict]:
+    """Fab Trace API 호출 → (content, artifact) 튜플 반환"""
+    result = await _call_api_raw(path, params)
+    return _format_content(result), _build_artifact(result)
 
 
 # ── 1. 불량 집계 ─────────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_defect_summary(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-) -> str:
+) -> tuple[str, dict]:
     """불량 유형별 집계를 조회합니다. Particle, Scratch, Mura 등 어떤 불량이 얼마나 발생했는지 파악할 때 사용합니다.
     수율 하락 원인 분석의 첫 단계로, 급증한 불량 유형을 식별합니다.
 
@@ -81,18 +133,18 @@ async def get_defect_summary(
         params["start"] = start.isoformat()
     if end:
         params["end"] = end.isoformat()
-    return await _call_api("/api/defects/summary", params)
+    return await _call_api_with_artifact("/api/defects/summary", params)
 
 
 # ── 2. 불량 좌표 분포 ────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_defect_map(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     defect_type: Optional[str] = None,
     limit: int = 500,
-) -> str:
+) -> tuple[str, dict]:
     """기판 위 불량 좌표(x, y) 분포를 조회합니다. 불량이 기판 어느 위치에 집중되는지 패턴을 분석할 때 사용합니다.
     - 엣지(가장자리) 집중 → 척(chuck) 이슈 의심
     - 중앙 집중 → 가스 분배 불균일 의심
@@ -112,12 +164,12 @@ async def get_defect_map(
         params["end"] = end.isoformat()
     if defect_type:
         params["defect_type"] = defect_type
-    return await _call_api("/api/defects/map", params)
+    return await _call_api_with_artifact("/api/defects/map", params)
 
 
 # ── 3. 불량 목록 ─────────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_defects(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
@@ -125,7 +177,7 @@ async def get_defects(
     lot_id: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-) -> str:
+) -> tuple[str, dict]:
     """불량 목록을 조회합니다. 불량이 발생한 LOT ID, 설비, 좌표, 크기 등 상세 정보를 확인할 때 사용합니다.
     어떤 LOT에서 불량이 집중되는지 파악하고, 해당 LOT를 FDC 역추적하는 데 활용합니다.
 
@@ -146,16 +198,16 @@ async def get_defects(
         params["defect_type"] = defect_type
     if lot_id:
         params["lot_id"] = lot_id
-    return await _call_api("/api/defects", params)
+    return await _call_api_with_artifact("/api/defects", params)
 
 
 # ── 4. FDC 역추적 ────────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_fdc_traceback(
     lot_id: str,
     limit: int = 500,
-) -> str:
+) -> tuple[str, dict]:
     """불량이 발생한 LOT의 설비 트레이스 데이터를 역추적합니다. (FDC: Fault Detection & Classification)
     특정 LOT가 어떤 설비에서 처리되었고, 처리 당시 각 파라미터 값이 어떠했는지 조회합니다.
     Spec 범위(LSL/USL)를 벗어난 파라미터를 자동으로 식별하여 근본 원인 설비와 파라미터를 특정합니다.
@@ -165,16 +217,16 @@ async def get_fdc_traceback(
         limit: 최대 반환 건수 (기본 500)
     """
     params = {"lot_id": lot_id, "limit": limit}
-    return await _call_api("/api/analytics/fdc", params)
+    return await _call_api_with_artifact("/api/analytics/fdc", params)
 
 
 # ── 5. 설비 건강도 ───────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_equipment_health(
     equipment_id: str,
     hours: int = 24,
-) -> str:
+) -> tuple[str, dict]:
     """특정 설비의 건강도 점수를 조회합니다. 최근 알람 수, CRITICAL/WARNING 비율, OOS(Out-of-Spec) 비율을 기반으로
     0~100점 건강도를 산출합니다.
     - 80점 이상: 양호
@@ -186,18 +238,18 @@ async def get_equipment_health(
         hours: 조회 시간 범위 (기본 24시간)
     """
     params = {"hours": hours}
-    return await _call_api(f"/api/equipment/{equipment_id}/health", params)
+    return await _call_api_with_artifact(f"/api/equipment/{equipment_id}/health", params)
 
 
 # ── 6. 트레이스 통계 요약 ────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_trace_summary(
     equipment_id: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     param_name: Optional[str] = None,
-) -> str:
+) -> tuple[str, dict]:
     """특정 설비의 파라미터 통계 요약(평균, 표준편차, 최솟값, 최댓값, OOS율)을 조회합니다.
     설비의 공정 안정성을 수치로 판단하고, Spec 대비 여유가 얼마나 있는지 확인할 때 사용합니다.
 
@@ -214,19 +266,19 @@ async def get_trace_summary(
         params["end"] = end.isoformat()
     if param_name:
         params["param_name"] = param_name
-    return await _call_api(f"/api/trace/{equipment_id}/summary", params)
+    return await _call_api_with_artifact(f"/api/trace/{equipment_id}/summary", params)
 
 
 # ── 7. 파라미터 Drift 분석 ───────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_param_drift(
     equipment_id: str,
     param_name: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     interval: str = "1h",
-) -> str:
+) -> tuple[str, dict]:
     """설비 파라미터의 시간에 따른 drift(편차 추이)를 분석합니다.
     이동평균과 전체평균의 차이를 시간대별로 보여주어, 언제부터 파라미터가 이탈하기 시작했는지 파악합니다.
     drift가 감지되면 예방정비(PM) 시점을 판단하는 데 활용됩니다.
@@ -243,18 +295,18 @@ async def get_param_drift(
         params["start"] = start.isoformat()
     if end:
         params["end"] = end.isoformat()
-    return await _call_api("/api/analytics/drift", params)
+    return await _call_api_with_artifact("/api/analytics/drift", params)
 
 
 # ── 8. 동일 타입 설비 비교 ───────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_trace_compare(
     equipment_type: str,
     param_name: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-) -> str:
+) -> tuple[str, dict]:
     """동일 타입 설비 간 특정 파라미터를 비교합니다. 같은 종류 설비(예: CVD 3대) 중 어느 설비만
     이상 값을 보이는지 확인하여 개별 설비 문제인지 전체 라인 문제인지 판별합니다.
 
@@ -269,41 +321,41 @@ async def get_trace_compare(
         params["start"] = start.isoformat()
     if end:
         params["end"] = end.isoformat()
-    return await _call_api("/api/trace/compare", params)
+    return await _call_api_with_artifact("/api/trace/compare", params)
 
 
 # ── 9. 설비 목록 ──────────────────────────────────────────
 
-@tool
-async def get_equipment_list() -> str:
+@tool(response_format="content_and_artifact")
+async def get_equipment_list() -> tuple[str, dict]:
     """전체 설비 목록과 현재 상태를 조회합니다. 각 설비의 ID, 타입, 챔버 수, 상태(RUNNING/IDLE/PM)를 확인할 때 사용합니다.
     분석 전 어떤 설비가 있는지 파악하거나, 특정 타입의 설비 ID를 찾을 때 활용합니다."""
-    return await _call_api("/api/equipment")
+    return await _call_api_with_artifact("/api/equipment")
 
 
 # ── 10. 설비 상세 정보 ────────────────────────────────────
 
-@tool
-async def get_equipment_detail(equipment_id: str) -> str:
+@tool(response_format="content_and_artifact")
+async def get_equipment_detail(equipment_id: str) -> tuple[str, dict]:
     """특정 설비의 상세 정보를 조회합니다. 설비 타입, 챔버 수, 설치 위치, 현재 상태, 마지막 PM 일시 등을 확인합니다.
 
     Args:
         equipment_id: 설비 ID (예: CVD-A01, ETCH-B01)"""
-    return await _call_api(f"/api/equipment/{equipment_id}")
+    return await _call_api_with_artifact(f"/api/equipment/{equipment_id}")
 
 
 # ── 11. 최신 센서 스냅샷 ──────────────────────────────────
 
-@tool
-async def get_trace_latest() -> str:
+@tool(response_format="content_and_artifact")
+async def get_trace_latest() -> tuple[str, dict]:
     """모든 설비의 최신 센서 데이터 스냅샷을 조회합니다. 현재 시점의 각 설비별 파라미터 값을 한눈에 확인할 때 사용합니다.
     실시간 모니터링이나 현재 상태 파악에 활용됩니다."""
-    return await _call_api("/api/trace/latest")
+    return await _call_api_with_artifact("/api/trace/latest")
 
 
 # ── 12. OOS 데이터 조회 ───────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_trace_oos(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
@@ -311,7 +363,7 @@ async def get_trace_oos(
     param_name: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-) -> str:
+) -> tuple[str, dict]:
     """Spec 범위(LSL/USL)를 벗어난 OOS(Out-of-Spec) 트레이스 데이터를 조회합니다.
     어떤 설비에서, 어떤 파라미터가, 얼마나 자주 Spec을 이탈하는지 파악할 때 사용합니다.
 
@@ -327,12 +379,12 @@ async def get_trace_oos(
     if end: params["end"] = end.isoformat()
     if equipment_id: params["equipment_id"] = equipment_id
     if param_name: params["param_name"] = param_name
-    return await _call_api("/api/trace/oos", params)
+    return await _call_api_with_artifact("/api/trace/oos", params)
 
 
 # ── 13. 설비 트레이스 데이터 ─────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_trace_data(
     equipment_id: str,
     start: Optional[datetime] = None,
@@ -340,7 +392,7 @@ async def get_trace_data(
     param_name: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-) -> str:
+) -> tuple[str, dict]:
     """특정 설비의 원시 트레이스 데이터를 조회합니다. 센서별 실측값, Spec 범위, OOS 여부를 시계열로 확인할 때 사용합니다.
     상세한 시계열 분석이나 특정 시점의 정확한 값을 확인할 때 활용합니다.
 
@@ -355,12 +407,12 @@ async def get_trace_data(
     if start: params["start"] = start.isoformat()
     if end: params["end"] = end.isoformat()
     if param_name: params["param_name"] = param_name
-    return await _call_api(f"/api/trace/{equipment_id}", params)
+    return await _call_api_with_artifact(f"/api/trace/{equipment_id}", params)
 
 
 # ── 14. 알람 목록 ─────────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_alarms(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
@@ -368,7 +420,7 @@ async def get_alarms(
     alarm_level: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-) -> str:
+) -> tuple[str, dict]:
     """알람 발생 이력을 조회합니다. 설비별, 알람 레벨별로 필터링하여 최근 알람 현황을 파악합니다.
     CRITICAL/WARNING/INFO 레벨로 구분되며, 설비 이상 징후를 조기에 감지할 때 사용합니다.
 
@@ -384,16 +436,16 @@ async def get_alarms(
     if end: params["end"] = end.isoformat()
     if equipment_id: params["equipment_id"] = equipment_id
     if alarm_level: params["alarm_level"] = alarm_level
-    return await _call_api("/api/alarms", params)
+    return await _call_api_with_artifact("/api/alarms", params)
 
 
 # ── 15. 알람 집계 ─────────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_alarm_summary(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-) -> str:
+) -> tuple[str, dict]:
     """설비별, 알람 레벨별 알람 발생 건수를 집계합니다. 어떤 설비에서 CRITICAL 알람이 많이 발생했는지
     한눈에 파악할 때 사용합니다. 설비 건강도 분석의 보조 지표로 활용됩니다.
 
@@ -403,18 +455,18 @@ async def get_alarm_summary(
     params = {}
     if start: params["start"] = start.isoformat()
     if end: params["end"] = end.isoformat()
-    return await _call_api("/api/alarms/summary", params)
+    return await _call_api_with_artifact("/api/alarms/summary", params)
 
 
 # ── 16. 알람 추이 ─────────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_alarm_trend(
     equipment_id: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     interval: str = "1h",
-) -> str:
+) -> tuple[str, dict]:
     """특정 설비의 알람 발생 추이를 시간대별로 조회합니다. 알람이 특정 시간대에 집중되는지,
     점차 증가하는 추세인지 파악하여 설비 열화나 간헐적 이상을 감지합니다.
 
@@ -426,12 +478,12 @@ async def get_alarm_trend(
     params = {"interval": interval}
     if start: params["start"] = start.isoformat()
     if end: params["end"] = end.isoformat()
-    return await _call_api(f"/api/alarms/{equipment_id}/trend", params)
+    return await _call_api_with_artifact(f"/api/alarms/{equipment_id}/trend", params)
 
 
 # ── 17. 이벤트 로그 ───────────────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_events(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
@@ -439,7 +491,7 @@ async def get_events(
     event_type: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-) -> str:
+) -> tuple[str, dict]:
     """설비 이벤트 로그를 조회합니다. PM(예방정비), 레시피 변경, 캘리브레이션 등 설비에서 발생한 이벤트를 확인합니다.
     불량 발생 전후에 어떤 이벤트가 있었는지 추적하여 원인 파악에 활용합니다.
 
@@ -455,18 +507,18 @@ async def get_events(
     if end: params["end"] = end.isoformat()
     if equipment_id: params["equipment_id"] = equipment_id
     if event_type: params["event_type"] = event_type
-    return await _call_api("/api/events", params)
+    return await _call_api_with_artifact("/api/events", params)
 
 
 # ── 18. 설비 이벤트 타임라인 ─────────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_event_timeline(
     equipment_id: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     limit: int = 100,
-) -> str:
+) -> tuple[str, dict]:
     """특정 설비의 이벤트를 시간순으로 조회합니다. PM, 레시피 변경, 오류 등 이벤트 이력을 타임라인으로 확인하여
     설비 상태 변화의 인과관계를 분석합니다.
 
@@ -478,19 +530,19 @@ async def get_event_timeline(
     params = {"limit": limit}
     if start: params["start"] = start.isoformat()
     if end: params["end"] = end.isoformat()
-    return await _call_api(f"/api/events/{equipment_id}/timeline", params)
+    return await _call_api_with_artifact(f"/api/events/{equipment_id}/timeline", params)
 
 
 # ── 19. 파라미터 상관관계 분석 ───────────────────────────
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_param_correlation(
     equipment_id: str,
     param_x: str,
     param_y: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-) -> str:
+) -> tuple[str, dict]:
     """두 파라미터 간 상관관계(Pearson 상관계수)를 분석합니다. 예를 들어 온도와 압력이 함께 변하는지,
     가스 유량 변화가 증착 두께에 영향을 주는지 등을 정량적으로 확인합니다.
     - 상관계수 0.7 이상: 강한 양의 상관
@@ -506,4 +558,4 @@ async def get_param_correlation(
     params = {"equipment_id": equipment_id, "param_x": param_x, "param_y": param_y}
     if start: params["start"] = start.isoformat()
     if end: params["end"] = end.isoformat()
-    return await _call_api("/api/analytics/correlation", params)
+    return await _call_api_with_artifact("/api/analytics/correlation", params)

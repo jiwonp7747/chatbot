@@ -1,10 +1,13 @@
 <template>
-  <div class="sidebar">
+  <div :class="['sidebar', { collapsed }]">
     <div class="sidebar-header">
       <div class="brand">
         <div class="brand-icon">Bi</div>
         <div class="brand-text">Bistelligence</div>
       </div>
+      <button class="collapse-btn" aria-label="사이드바 접기" @click="emit('toggle-sidebar')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
       <button class="new-chat-btn" @click="emit('new-chat')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New Chat
@@ -106,6 +109,7 @@ import type { ChatSession } from '../types/chat';
 defineProps<{
   sessions: ChatSession[];
   currentSessionId: string | null;
+  collapsed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -115,6 +119,7 @@ const emit = defineEmits<{
   'rag-tags-open': [];
   'session-delete': [id: string];
   'session-rename': [payload: { id: string; title: string }];
+  'toggle-sidebar': [];
 }>();
 
 const editingSessionId = ref<string | null>(null);
@@ -181,11 +186,42 @@ function formatTimestamp(timestamp: number): string {
   flex-direction: column;
   overflow: hidden;
   font-family: var(--font);
+  transition: width 0.3s ease, border-color 0.3s ease;
+  flex-shrink: 0;
+}
+
+.sidebar.collapsed {
+  width: 0;
+  border-color: transparent;
 }
 
 .sidebar-header {
   padding: 20px;
   border-bottom: 1px solid var(--glass-border);
+  position: relative;
+}
+
+.collapse-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.collapse-btn:hover {
+  background: var(--glass-hover);
+  border-color: var(--glass-border);
+  color: var(--text-1);
 }
 
 .brand {

@@ -1,3 +1,3 @@
-from .llm_adapter import LLMAdapter, LLMProvider, get_llm_adapter
+from .llm_adapter import LLMAdapter, get_llm_adapter
 
-__all__ = ["LLMAdapter", "LLMProvider", "get_llm_adapter"]
+__all__ = ["LLMAdapter", "get_llm_adapter"]

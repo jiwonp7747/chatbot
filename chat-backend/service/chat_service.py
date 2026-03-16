@@ -1,23 +1,18 @@
 import os
-import logging
 import uuid
+import logging
 from datetime import datetime
-from typing import AsyncGenerator, Optional
+from typing import Optional
 
 from pydantic import BaseModel
-from starlette.requests import Request
 
 from client.llm_adapter import get_llm_adapter
 from common.exception.api_exception import ApiException
 from common.response.code import FailureCode
-from config.prompt import SYSTEM_PROMPT
-from db.models import ChatSession, ChatMessage, ModelType
-from ai.graph.schema.stream import ChatRequest, ChatResponse, StreamStatus
-from util.sse_formatter import SSEFormatter
+from db.models import ChatSession, ModelType
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import desc, asc
-from service.model_resolver import resolve_model_config
+from sqlalchemy import desc, asc, text
 
 logger = logging.getLogger("chat-server")
 
@@ -43,58 +38,11 @@ async def create_chat_title(user_prompt: str) -> Optional[str]:
         return (user_prompt or "새 채팅")[:15]
 
 
-async def save_user_message_to_db(
+async def create_or_get_session(
     chat_session_id: int,
     prompt: str,
-    created_at: datetime,
-):
-    if not chat_session_id or not prompt:
-        raise ApiException(FailureCode.INTERNAL_SERVER_ERROR, "user chat saving content is null")
-
-    from db.database import AsyncSessionLocal
-    async with AsyncSessionLocal() as db:
-        try:
-            # 세션 확인/생성
-            session_query = select(ChatSession).where(
-                ChatSession.chat_session_id == chat_session_id
-            )
-            session_result = await db.execute(session_query)
-            chat_session = session_result.scalar_one_or_none()
-
-            if not chat_session:
-                # 새 세션: LLM으로 제목 생성
-                title = await create_chat_title(prompt)
-                new_session = ChatSession(
-                    chat_session_id=chat_session_id,
-                    session_title=title or prompt[:15] or "새 채팅"
-                )
-                db.add(new_session)
-                await db.commit()
-                await db.refresh(new_session)
-                chat_session = new_session
-
-            # 사용자 메시지 저장
-            user_message = ChatMessage(
-                role="user",
-                content=prompt,
-                chat_session_id=chat_session.chat_session_id,
-                created_at=created_at,
-            )
-            db.add(user_message)
-            await db.commit()
-            logger.info(f"✅ 사용자 메시지 저장 완료: session={chat_session_id}")
-        except Exception as e:
-            logger.error(f"❌ 사용자 메시지 저장 실패: {e}")
-            await db.rollback()
-
-
-async def save_ai_message_to_db(
-    chat_session_id: int,
-    content: str,
-):
-    if not chat_session_id or not content:
-        raise ApiException(FailureCode.INTERNAL_SERVER_ERROR, "ai chat saving content is null")
-
+) -> str:
+    """세션 확인/생성 후 thread_id 반환. 새 세션이면 LLM으로 제목 생성."""
     from db.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
@@ -104,122 +52,26 @@ async def save_ai_message_to_db(
             session_result = await db.execute(session_query)
             chat_session = session_result.scalar_one_or_none()
 
-            if not chat_session:
-                raise ApiException(FailureCode.INTERNAL_SERVER_ERROR, f"세션을 찾을 수 없음: {chat_session_id}")
+            if chat_session:
+                return chat_session.thread_id
 
-            ai_message = ChatMessage(
-                role="assistant",
-                content=content,
-                chat_session_id=chat_session.chat_session_id,
-                created_at=datetime.utcnow(),
+            # 새 세션: thread_id 생성 + LLM으로 제목 생성
+            thread_id = str(uuid.uuid4())
+            title = await create_chat_title(prompt)
+            new_session = ChatSession(
+                chat_session_id=chat_session_id,
+                session_title=title or prompt[:15] or "새 채팅",
+                thread_id=thread_id,
             )
-            db.add(ai_message)
-            chat_session.updated_at = datetime.utcnow()
+            db.add(new_session)
             await db.commit()
-            logger.info(f"✅ AI 메시지 저장 완료: session={chat_session_id}")
+            await db.refresh(new_session)
+            logger.info(f"✅ 새 세션 생성: session={chat_session_id}, thread={thread_id}")
+            return thread_id
         except Exception as e:
-            logger.error(f"❌ AI 메시지 저장 실패: {e}")
+            logger.error(f"❌ 세션 생성/조회 실패: {e}")
             await db.rollback()
-
-
-# streaming chat service
-async def process_chat_request(
-        request: ChatRequest,
-        db: AsyncSession,
-        http_request: Request,
-)->AsyncGenerator[str, None]:
-    message_history = None
-    stream_id = str(uuid.uuid4())
-
-    user_chat_created_at = datetime.utcnow()
-    stream = None
-
-    # 사용자 메시지 즉시 저장
-    await save_user_message_to_db(request.chat_session_id, request.prompt, user_chat_created_at)
-
-    try:
-        query = select(ChatMessage).where(ChatMessage.chat_session_id == request.chat_session_id).order_by(asc(ChatMessage.created_at)).limit(10)
-        result = await db.execute(query)
-        messages = result.scalars().all()
-
-        message_history = messages
-
-
-    except Exception as e:
-        logger.error(f"채팅 기록 조회 에러, {e}")
-
-        error_response = ChatResponse(
-            content="",
-            status=StreamStatus.ERROR,
-            error=str(e)
-        )
-        yield SSEFormatter.format(error_response)
-
-
-
-    try:
-        messages = []
-        messages.append(
-            {"role": "system", "content": SYSTEM_PROMPT}
-        )
-        for chat_message in message_history:
-            message = {
-                "role": chat_message.role,
-                "content": chat_message.content,
-            }
-            messages.append(message)
-        messages.append(
-            {"role": "user", "content": request.prompt}
-        )
-
-        # OpenAI API 호출 (stream=True)
-        resolved_model = await resolve_model_config(db, request.model)
-        llm_adapter = get_llm_adapter(
-            model=resolved_model.api_model,
-            provider=resolved_model.provider,
-        )
-        stream = await llm_adapter.stream_completion(
-            model=resolved_model.api_model,
-            messages=messages,
-        )
-
-        # 응답을 청크 단위로 스트리밍
-        collected_content = ""
-        async for chunk in stream:
-            if await http_request.is_disconnected():
-                logger.info(f"🔌 클라이언트 연결 끊김 감지: {stream_id}")
-                await stream.aclose()
-                # 중단 시에도 수집된 내용 저장
-                if collected_content:
-                    await save_ai_message_to_db(request.chat_session_id, collected_content)
-                return
-
-            content = chunk.choices[0].delta.content
-
-            if content:
-                collected_content += content
-                response = ChatResponse(
-                    content=content,
-                    status=StreamStatus.STREAMING
-                )
-                yield SSEFormatter.format(response)
-
-        # 정상 완료 - AI 응답 저장
-        if collected_content:
-            await save_ai_message_to_db(request.chat_session_id, collected_content)
-
-        logger.info(f"✅ 스트리밍 정상 완료: {stream_id}")
-        done_response = ChatResponse(content="", status=StreamStatus.DONE)
-        yield SSEFormatter.format(done_response)
-
-    except Exception as e:
-        logger.error(f"❌ 스트리밍 에러: {stream_id}, {e}")
-        error_response = ChatResponse(
-            content="",
-            status=StreamStatus.ERROR,
-            error=str(e)
-        )
-        yield SSEFormatter.format(error_response)
+            raise
 
 
 async def get_chat_sessions(
@@ -234,9 +86,69 @@ async def get_chat_messages(
         chat_session_id: int,
         db: AsyncSession,
 ):
-    query = select(ChatMessage).where(ChatMessage.chat_session_id == chat_session_id).order_by(asc(ChatMessage.created_at))
-    result = await db.execute(query)
-    return result.scalars().all()
+    """checkpoint에서 메시지를 추출하여 반환"""
+    # 1. session에서 thread_id 조회
+    session_query = select(ChatSession).where(
+        ChatSession.chat_session_id == chat_session_id
+    )
+    session_result = await db.execute(session_query)
+    chat_session = session_result.scalar_one_or_none()
+
+    if not chat_session or not chat_session.thread_id:
+        return []
+
+    # 2. checkpointer에서 최신 checkpoint 가져오기
+    from ai.checkpointer import get_checkpointer
+    checkpointer = get_checkpointer()
+    if not checkpointer:
+        logger.warning("checkpointer가 초기화되지 않음")
+        return []
+
+    try:
+        config = {"configurable": {"thread_id": chat_session.thread_id}}
+        checkpoint_tuple = await checkpointer.aget_tuple(config)
+        if not checkpoint_tuple:
+            return []
+
+        # 3. checkpoint에서 messages 채널 추출
+        channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
+        messages = channel_values.get("messages", [])
+
+        # 4. HumanMessage/AIMessage만 필터링하여 프론트 포맷으로 변환
+        from langchain_core.messages import HumanMessage, AIMessage
+        result = []
+        for idx, msg in enumerate(messages):
+            if isinstance(msg, HumanMessage):
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                result.append({
+                    "id": str(idx),
+                    "role": "user",
+                    "content": content,
+                    "created_at": None,
+                })
+            elif isinstance(msg, AIMessage) and msg.content:
+                content = msg.content if isinstance(msg.content, str) else ""
+                if isinstance(msg.content, list):
+                    parts = []
+                    for part in msg.content:
+                        if isinstance(part, str):
+                            parts.append(part)
+                        elif isinstance(part, dict) and part.get("type") == "text":
+                            parts.append(part.get("text", ""))
+                    content = "".join(parts)
+                if content:  # 빈 content (tool_calls만 있는 AIMessage) 필터링
+                    result.append({
+                        "id": str(idx),
+                        "role": "assistant",
+                        "content": content,
+                        "created_at": None,
+                    })
+
+        logger.info(f"✅ checkpoint에서 메시지 {len(result)}개 추출: session={chat_session_id}")
+        return result
+    except Exception as e:
+        logger.error(f"❌ checkpoint 메시지 추출 실패: {e}")
+        return []
 
 
 
@@ -258,6 +170,14 @@ async def delete_chat_session(
 
     if not chat_session:
         raise ApiException(FailureCode.NOT_FOUND_DATA, "존재하지 않는 채팅 세션입니다")
+
+    # checkpoint 테이블 정리 (thread_id가 있는 경우)
+    if chat_session.thread_id:
+        thread_id = chat_session.thread_id
+        await db.execute(text("DELETE FROM checkpoint_writes WHERE thread_id = :tid"), {"tid": thread_id})
+        await db.execute(text("DELETE FROM checkpoint_blobs WHERE thread_id = :tid"), {"tid": thread_id})
+        await db.execute(text("DELETE FROM checkpoints WHERE thread_id = :tid"), {"tid": thread_id})
+        logger.info(f"🗑️ checkpoint 정리 완료: thread={thread_id}")
 
     await db.delete(chat_session)
     await db.commit()

@@ -278,10 +278,10 @@ export class ChatService {
       }
 
       return apiResponse.data.map(msg => ({
-        id: msg.chat_message_id.toString(),
-        role: msg.role === 'system' ? 'assistant' : msg.role,
+        id: msg.id,
+        role: msg.role,
         content: msg.content,
-        timestamp: new Date(msg.created_at).getTime(),
+        timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
       }));
 
     } catch (error) {

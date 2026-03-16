@@ -13,9 +13,6 @@ class ChatGraphState(MessagesState, total=False):
     """
     # 입력 데이터
     user_prompt: str
-    model: str  # model key
-    api_model: str
-    provider: str
 
     # 의도 분석 결과
     intent_analysis: Optional[Dict[str, Any]]  # {"intent": "question", "confidence": 0.9, ...}

@@ -38,6 +38,7 @@ class LargeDataMiddleware(FilesystemMiddleware):
         result = handler(request)
 
         if isinstance(result, ToolMessage):
+            # artifact는 LLM 컨텍스트에 포함되지 않으므로 크기 체크 대상에서 제외
             content_str = str(result.content)
             if len(content_str) > self.threshold:
                 resolved = self._get_backend(request.runtime)
@@ -72,7 +73,7 @@ class LargeDataMiddleware(FilesystemMiddleware):
         return super().wrap_model_call(request, handler)
 
 
-def create_large_data_middleware(backend, threshold: int = 100_000) -> LargeDataMiddleware:
+def create_large_data_middleware(backend, threshold: int = 10000) -> LargeDataMiddleware:
     """LargeDataMiddleware 팩토리 함수
 
     서브에이전트의 middleware 리스트에 추가하여 사용합니다.

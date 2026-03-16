@@ -5,7 +5,6 @@ LangGraph 기반 채팅 서비스
 Subagents 패턴 오케스트레이터: graph/orchestrator.py
 """
 import logging
-import uuid
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
@@ -18,7 +17,7 @@ from ai.graph.schema.graph_state import ChatGraphState
 from ai.graph.orchestrator import Orchestrator
 from util.sse_formatter import SSEFormatter
 
-from .chat_service import save_user_message_to_db, save_ai_message_to_db
+from .chat_service import create_or_get_session
 from .model_resolver import resolve_model_config
 
 logger = logging.getLogger("chat-server")
@@ -50,15 +49,11 @@ def _format_done_sse() -> str:
 
 def _build_initial_state(
     request: ChatRequest,
-    resolved_model,
     user_chat_created_at: datetime,
     thread_id: str,
 ) -> ChatGraphState:
     return {
         "user_prompt": request.prompt,
-        "model": resolved_model.model_key,
-        "api_model": resolved_model.api_model,
-        "provider": resolved_model.provider,
         "intent_analysis": None,
         "available_tools": [],
         "tools_to_call": [],
@@ -72,13 +67,6 @@ def _build_initial_state(
         "thread_id": thread_id,
         "error": None,
     }
-
-
-async def _resolve_model_string(db: AsyncSession, requested_model: Optional[str]) -> str:
-    resolved_model = await resolve_model_config(db, requested_model)
-    provider = resolved_model.provider.lower()
-    provider = Orchestrator._LANGCHAIN_PROVIDER_MAP.get(provider, provider)
-    return f"{provider}:{resolved_model.api_model}"
 
 
 async def _yield_ai_stream_chunks(
@@ -116,7 +104,7 @@ async def process_chat(
         SSE 형식의 응답 청크
     """
     is_resume = isinstance(request, ResumeRequest)
-    thread_id = str(uuid.uuid4())
+    thread_id = None
     pending = None
     user_chat_created_at = None
 
@@ -130,7 +118,7 @@ async def process_chat(
             if not pending:
                 logger.warning(f"⚠️ HITL 원본 요청 정보 없음: {request.thread_id}")
 
-            model_string = await _resolve_model_string(db, request.model)
+            resolved_model = await resolve_model_config(db, request.model)
             auth_header = http_request.headers.get("authorization")
 
             async for sse_msg in orchestrator.run(
@@ -138,8 +126,9 @@ async def process_chat(
                 result=result,
                 chat_session_id=request.chat_session_id,
                 token=auth_header,
+                model_string=resolved_model.model_string,
+                model_kwargs=resolved_model.model_kwargs,
                 approved=request.approved,
-                model_string=model_string,
                 edit_message=request.edit_message,
                 edited_tool_calls=request.edited_tool_calls,
             ):
@@ -161,12 +150,12 @@ async def process_chat(
                 return
 
             user_chat_created_at = datetime.utcnow()
-            await save_user_message_to_db(request.chat_session_id, request.prompt, user_chat_created_at)
+            # 세션 생성/조회하여 thread_id 획득
+            thread_id = await create_or_get_session(request.chat_session_id, request.prompt)
 
             resolved_model = await resolve_model_config(db, request.model)
             initial_state = _build_initial_state(
                 request=request,
-                resolved_model=resolved_model,
                 user_chat_created_at=user_chat_created_at,
                 thread_id=thread_id,
             )
@@ -178,6 +167,8 @@ async def process_chat(
                 result=result,
                 chat_session_id=request.chat_session_id,
                 token=auth_header,
+                model_string=resolved_model.model_string,
+                model_kwargs=resolved_model.model_kwargs,
                 initial_state=initial_state,
             ):
                 yield sse_msg
@@ -215,13 +206,6 @@ async def process_chat(
                     yield chunk_sse
             except _ClientDisconnectedError:
                 return
-
-            # DB 저장: resume일 때는 pending이 있을 때만
-            if not is_resume or pending:
-                await save_ai_message_to_db(
-                    request.chat_session_id,
-                    result.ai_response,
-                )
 
             yield _format_done_sse()
             logger.info(f"✅ {'HITL resume' if is_resume else '스트리밍'} 완료: {thread_id}")

@@ -33,19 +33,19 @@ from ai.agents.rag_agent import create_rag_subagent
 from ai.agents.tool_agent import create_tool_subagent
 from ai.agents.fab_trace_agent import create_fab_trace_subagent
 from ai.backend import get_database_backend
+from ai.checkpointer import get_checkpointer
 from ai.middleware.large_data_middleware import create_large_data_middleware
 from ai.graph.schema.graph_state import ChatGraphState
 from ai.graph.schema.context import ChatContext
 from ai.graph.schema.stream import AvailableTool, ChatResponse, HitlToolCall, StreamStatus, StreamResult
-from ai.graph.nodes import load_chat_history_node
+from ai.middleware.tool_call_inject_middleware import create_tool_call_inject_middleware
+from ai.middleware.tool_call_review_middleware import create_tool_call_review_middleware
 from ai.tools.mcp.wrapper import wrap_mcp_tools
 from mcp_hub import get_mcp_registry
 from util.sse_formatter import SSEFormatter
 
 logger = logging.getLogger("chat-server")
 
-# 모듈 싱글턴: 모든 thread의 체크포인트를 공유
-_checkpointer = InMemorySaver()
 # 모델별 에이전트 캐시 (매 요청마다 재빌드 방지) — (agent, created_at) 튜플
 _agent_cache: dict[str, tuple[object, float]] = {}
 _CACHE_TTL = 3600  # 1시간
@@ -99,6 +99,10 @@ def get_tool_schemas(tool_names: list[str] | None = None) -> list[dict]:
 
 MAIN_AGENT_PROMPT = """당신은 AI 어시스턴트 오케스트레이터입니다.
 사용자의 요청을 분석하여 적절한 전문가에게 task 도구로 위임하세요.
+
+## 작업절차 
+
+바로 답변할 수 있는 단순한 질문이외 복잡한 작업 (팹 관리)의 경우 write_todos 도구를 사용하세요.
 
 ## 위임 규칙 (반드시 준수)
 
@@ -252,17 +256,18 @@ def _collect_subagent_updates(
                     sse_messages.append(SSEFormatter.format(sub_resp))
 
         # 도구 노드가 완료되었을 때
-        # TODO 도구 완료 결과 확인 메시지와 함께 csv 파일 식별자 전송
         elif key == "tools":
             msgs = value.get("messages", [])
             for msg in msgs:
                 if hasattr(msg, "name"):
+                    artifact = getattr(msg, "artifact", None)
                     sub_resp = ChatResponse(
                         content=f"✅ {msg.name} 완료",
                         status=StreamStatus.SUB_PROGRESS,
                         agent_name=agent_name,
                         sub_tools=[msg.name],
                         parallel=False,
+                        artifact=artifact if isinstance(artifact, dict) else None,
                     )
                     sse_messages.append(SSEFormatter.format(sub_resp))
 
@@ -287,13 +292,23 @@ def _collect_main_updates(chunk: dict, ai_response: str) -> tuple[list[str], str
                         )
                         sse_messages.append(SSEFormatter.format(progress))
 
-                if isinstance(msg, AIMessage) and msg.content and not getattr(msg, "tool_calls", None):
+                if isinstance(msg, AIMessage) and msg.content:
                     updated_ai_response = _content_to_str(msg.content)
 
         elif key == "tools":
             msgs = value.get("messages", [])
             for msg in msgs:
                 if hasattr(msg, "name"):
+                    artifact = getattr(msg, "artifact", None)
+                    if isinstance(artifact, dict) and artifact:
+                        tool_done = ChatResponse(
+                            content=f"✅ {msg.name} 완료",
+                            status=StreamStatus.SUB_PROGRESS,
+                            sub_tools=[msg.name],
+                            parallel=False,
+                            artifact=artifact,
+                        )
+                        sse_messages.append(SSEFormatter.format(tool_done))
                     logger.info(f"✅ 서브에이전트 완료: {msg.name}")
 
     return sse_messages, updated_ai_response
@@ -324,7 +339,7 @@ class Orchestrator:
 
         return self._mcp_tools
 
-    async def _get_or_build_agent(self, model_string: str):
+    async def _get_or_build_agent(self, model_string: str, model_kwargs: dict | None = None):
         """에이전트 캐시에서 가져오거나 새로 빌드 (TTL 기반 만료)"""
         if model_string in _agent_cache:
             agent, created_at = _agent_cache[model_string]
@@ -332,21 +347,24 @@ class Orchestrator:
                 return agent
             logger.info(f"🔄 캐시 만료: {model_string}")
 
-        agent = await self._build_main_agent(model_string)
+        agent = await self._build_main_agent(model_string, model_kwargs)
         _agent_cache[model_string] = (agent, time.time())
         return agent
 
-    async def _build_main_agent(self, model_string: str):
+    async def _build_main_agent(self, model_string: str, model_kwargs: dict | None = None):
         """서브에이전트를 구성하고 Deep Agent 생성"""
         mcp_tools = await self._load_mcp_tools()
         backend = get_database_backend()
         large_data_mw = create_large_data_middleware(backend)
+        tool_call_review_mw = create_tool_call_review_middleware(model_string, 1)
+        tool_call_inject_mw = create_tool_call_inject_middleware(model_string)
 
         subagents = [
             create_rag_subagent(),
-            create_fab_trace_subagent(middleware=[large_data_mw]),
+            create_fab_trace_subagent(),
         ]
         if mcp_tools:
+            # large_data_mw
             subagents.append(create_tool_subagent(mcp_tools, middleware=[large_data_mw]))
 
         # 서브에이전트별 도구 목록 및 스키마 레지스트리 등록
@@ -390,27 +408,25 @@ class Orchestrator:
 
         logger.info(f"🤖 서브에이전트 {len(subagents)}개 구성 완료")
 
+        # model_kwargs가 있으면 pre-build된 BaseChatModel 인스턴스 전달
+        if model_kwargs:
+            from langchain.chat_models import init_chat_model
+            model = init_chat_model(model_string, **model_kwargs)
+        else:
+            model = model_string
+
+        # checkpointer
+        checkpointer = get_checkpointer()
+
         return create_deep_agent(
-            model=model_string,
+            model=model,
             subagents=subagents,
-            checkpointer=_checkpointer,
+            checkpointer=checkpointer,
+            middleware=[tool_call_inject_mw],
             system_prompt=MAIN_AGENT_PROMPT,
             backend=backend,
             context_schema=ChatContext,
         )
-
-    # 내부 provider → LangChain init_chat_model prefix
-    _LANGCHAIN_PROVIDER_MAP = {
-        "gemini": "google_genai",
-    }
-
-    @staticmethod
-    def _resolve_model_string(state: ChatGraphState) -> str:
-        """상태에서 create_deep_agent용 모델 문자열 생성"""
-        provider = state.get("provider", "openai").lower()
-        provider = Orchestrator._LANGCHAIN_PROVIDER_MAP.get(provider, provider)
-        api_model = state.get("api_model", "gpt-4o-mini")
-        return f"{provider}:{api_model}"
 
     @staticmethod
     def _build_messages(state: ChatGraphState) -> list:
@@ -550,11 +566,13 @@ class Orchestrator:
         # runtime config (state가 아닌 configurable로 전달)
         chat_session_id: int | None = None,
         token: str | None = None,
+        # 모델 정보 (model_resolver에서 생성)
+        model_string: str | None = None,
+        model_kwargs: dict | None = None,
         # 신규 채팅용 (None이면 resume)
         initial_state: ChatGraphState | None = None,
         # HITL resume용
         approved: bool | None = None,
-        model_string: str | None = None,
         edit_message: str | None = None,
         edited_tool_calls: list | None = None,
     ) -> AsyncGenerator[str, None]:
@@ -578,24 +596,17 @@ class Orchestrator:
             try:
                 if is_new_chat:
                     # --- 신규 채팅 ---
-                    # 1. 대화 기록 로드
-                    yield SSEFormatter.format(ChatResponse(
-                        content="📚 대화 기록을 불러오고 있습니다...",
-                        status=StreamStatus.PROGRESS,
-                    ))
-                    history_result = await load_chat_history_node(chat_session_id, self.db)
-                    state = {**initial_state, **history_result}
+                    state = initial_state
 
-                    # 2. 메인 에이전트 구성
-                    resolved_model_string = self._resolve_model_string(state)
-                    span.set_attribute("model", resolved_model_string)
+                    # 메인 에이전트 구성
+                    span.set_attribute("model", model_string)
                     yield SSEFormatter.format(ChatResponse(
                         content="🔧 전문가 에이전트를 준비하고 있습니다...",
                         status=StreamStatus.PROGRESS,
                     ))
 
-                    main_agent = await self._get_or_build_agent(resolved_model_string)
-                    logger.info(f"🤖 메인 에이전트 준비 완료: model={resolved_model_string}")
+                    main_agent = await self._get_or_build_agent(model_string, model_kwargs)
+                    logger.info(f"🤖 메인 에이전트 준비 완료: model={model_string}")
 
                     # 3. 메시지 구성
                     messages = self._build_messages(state)
@@ -608,7 +619,7 @@ class Orchestrator:
 
                 else:
                     # --- HITL resume ---
-                    main_agent = await self._get_or_build_agent(model_string)
+                    main_agent = await self._get_or_build_agent(model_string, model_kwargs)
 
                     # interrupt 시 저장해둔 도구 정보
                     interrupted_info = _interrupted_tools.pop(thread_id, None)
@@ -631,12 +642,18 @@ class Orchestrator:
                         ))
 
                     elif edit_message:
-                        # REJECT + message: 거부 사유와 함께 재추론
+                        # MESSAGE MODIFICATION: 거부 사유 반영하여 다른 도구로 재시도
+                        reject_msg = (
+                            f"사용자가 도구 호출을 거부했습니다.\n"
+                            f"사유: {edit_message}\n\n"
+                            f"[필수 지침] 사용자의 거부 사유를 반영하여 반드시 다른 도구를 호출하거나, "
+                            f"수정된 인자로 재시도하세요. 텍스트만 응답하고 종료하는 것은 금지입니다."
+                        )
                         resume_value = {"decisions": [
-                            {"type": "reject", "message": f"사용자가 도구 호출을 거부했습니다: {edit_message}"} for _ in range(tool_count)
+                            {"type": "reject", "message": reject_msg} for _ in range(tool_count)
                         ]}
-                        span.set_attribute("hitl.rejected_with_message", True)
-                        logger.info(f"❌ HITL 거부+메시지: message={edit_message}, thread={thread_id}")
+                        span.set_attribute("hitl.message_modification", True)
+                        logger.info(f"💬 HITL 메시지 수정: message={edit_message}, thread={thread_id}")
 
                         yield SSEFormatter.format(ChatResponse(
                             content=f"💬 거부 사유를 반영하여 재시도 중...",

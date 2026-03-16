@@ -22,6 +22,14 @@ export interface AvailableTool {
   description: string;
 }
 
+export interface ToolArtifact {
+  type: string;
+  columns?: string[];
+  rows?: unknown[][];
+  summary?: string;
+  meta?: Record<string, unknown>;
+}
+
 export interface ChatResponse {
   content: string;
   status: 'progress' | 'streaming' | 'done' | 'error' | 'confirm' | 'sub_progress';
@@ -35,6 +43,8 @@ export interface ChatResponse {
   agent_name?: string;
   sub_tools?: string[];
   parallel?: boolean;
+  // 도구 결과 artifact (테이블 등 구조화된 데이터)
+  artifact?: ToolArtifact;
 }
 
 export interface EditedToolCall {
@@ -110,11 +120,10 @@ export interface SessionsApiResponse {
 }
 
 export interface MessageData {
-  chat_message_id: number;
+  id: string;
   content: string;
-  created_at: string;
-  role: 'user' | 'system';
-  chat_session_id: number;
+  created_at: string | null;
+  role: 'user' | 'assistant';
 }
 
 export interface MessagesApiResponse {

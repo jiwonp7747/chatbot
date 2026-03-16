@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ChatSession, Message, ModelType, ChatResponse, HitlToolCall, ToolSchema, EditedToolCall, AvailableTool } from '../types/chat';
+import { ChatSession, Message, ModelType, ChatResponse, HitlToolCall, ToolSchema, EditedToolCall, AvailableTool, ToolArtifact } from '../types/chat';
 import { chatService } from '../services/chatService';
 import { storage } from '../utils/storage';
 
@@ -15,9 +15,11 @@ interface PendingConfirm {
   editedArgs: Record<number, Record<string, unknown>>;  // idx → 수정된 인자
   editedToolNames: Record<number, string>;     // idx → 변경된 도구명
   schemasLoading: boolean;
-  // 거부 모드 (REJECT + message)
+  // 메시지 수정 모드 (거부 사유 반영하여 재시도)
+  isMessageEditing: boolean;
+  editMessage: string;
+  // 거부 모드 (순수 거절)
   isRejecting: boolean;
-  rejectMessage: string;
 }
 
 interface SubProgressEntry {
@@ -25,6 +27,7 @@ interface SubProgressEntry {
   tools: string[];
   parallel: boolean;
   agent: string;
+  artifact?: ToolArtifact;
 }
 
 interface ChatState {
@@ -77,9 +80,11 @@ export const useChatStore = defineStore('chat', {
 
     newChat() {
       this.currentSessionId = null;
+      this.pendingConfirm = null;
     },
 
     async selectSession(sessionId: string) {
+      this.pendingConfirm = null;
       try {
         this.currentSessionId = sessionId;
 
@@ -194,6 +199,7 @@ export const useChatStore = defineStore('chat', {
               tools: response.sub_tools || [],
               parallel: response.parallel || false,
               agent: response.agent_name || '',
+              artifact: response.artifact,
             });
           } else if (response.status === 'streaming') {
             const previousStatus = this.streamingStatusMap[sessionId];
@@ -252,8 +258,9 @@ export const useChatStore = defineStore('chat', {
               editedArgs: {},
               editedToolNames: {},
               schemasLoading: false,
+              isMessageEditing: false,
+              editMessage: '',
               isRejecting: false,
-              rejectMessage: '',
             };
           } else if (response.status === 'error') {
             const errorMessage: Message = {
@@ -366,6 +373,7 @@ export const useChatStore = defineStore('chat', {
           tools: response.sub_tools || [],
           parallel: response.parallel || false,
           agent: response.agent_name || '',
+          artifact: response.artifact,
         });
       } else if (response.status === 'streaming') {
         const previousStatus = this.streamingStatusMap[sessionId];
@@ -398,8 +406,9 @@ export const useChatStore = defineStore('chat', {
           editedArgs: {},
           editedToolNames: {},
           schemasLoading: false,
+          isMessageEditing: false,
+          editMessage: '',
           isRejecting: false,
-          rejectMessage: '',
         };
       } else if (response.status === 'done') {
         const currentContent = this.streamingContentMap[sessionId] || '';
@@ -486,6 +495,7 @@ export const useChatStore = defineStore('chat', {
       const pc = this.pendingConfirm;
       pc.isEditing = !pc.isEditing;
       pc.isRejecting = false;
+      pc.isMessageEditing = false;
       if (pc.isEditing) {
         // 현재 args로 pre-fill
         pc.editedArgs = {};
@@ -572,23 +582,25 @@ export const useChatStore = defineStore('chat', {
       );
     },
 
-    toggleRejectMode() {
+    toggleMessageEditMode() {
       if (!this.pendingConfirm) return;
       const pc = this.pendingConfirm;
-      pc.isRejecting = !pc.isRejecting;
+      pc.isMessageEditing = !pc.isMessageEditing;
       pc.isEditing = false;
-      if (pc.isRejecting) {
-        pc.rejectMessage = '';
+      pc.isRejecting = false;
+      if (pc.isMessageEditing) {
+        pc.editMessage = '';
       }
     },
 
-    submitReject() {
+    submitMessageEdit() {
       if (!this.pendingConfirm || !this.streamingSessionId) return;
 
       const pc = this.pendingConfirm;
       const sessionId = this.streamingSessionId;
       const threadId = pc.threadId;
-      const editMessage = pc.rejectMessage.trim() || '사용자가 도구 실행을 거부했습니다.';
+      const editMessage = pc.editMessage.trim();
+      if (!editMessage) return;
 
       this.pendingConfirm = null;
       this.streamingContentMap[sessionId] = '';
@@ -603,6 +615,45 @@ export const useChatStore = defineStore('chat', {
           model: modelToUse,
           chat_session_id: parseInt(sessionId) || null,
           edit_message: editMessage,
+        },
+        (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
+        (error: Error) => {
+          console.error('Resume error:', error);
+          delete this.streamingContentMap[sessionId];
+          delete this.streamingStatusMap[sessionId];
+          this.streamingSessionId = null;
+        },
+        () => {}
+      );
+    },
+
+    toggleRejectMode() {
+      if (!this.pendingConfirm) return;
+      const pc = this.pendingConfirm;
+      pc.isRejecting = !pc.isRejecting;
+      pc.isEditing = false;
+      pc.isMessageEditing = false;
+    },
+
+    submitReject() {
+      if (!this.pendingConfirm || !this.streamingSessionId) return;
+
+      const pc = this.pendingConfirm;
+      const sessionId = this.streamingSessionId;
+      const threadId = pc.threadId;
+
+      this.pendingConfirm = null;
+      this.streamingContentMap[sessionId] = '';
+      this.streamingStatusMap[sessionId] = 'progress';
+
+      const modelToUse = this.sessions.find(s => s.id === sessionId)?.model || this.selectedModel;
+
+      chatService.resumeChat(
+        {
+          thread_id: threadId,
+          approved: false,
+          model: modelToUse,
+          chat_session_id: parseInt(sessionId) || null,
         },
         (response: ChatResponse) => this._handleResumeResponse(sessionId, response),
         (error: Error) => {

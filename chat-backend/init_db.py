@@ -1,6 +1,6 @@
 """
 DB 초기화 스크립트
-- 테이블 생성 (chat_session, chat_message, model_type, prompt_template)
+- 테이블 생성 (chat_session, model_type, prompt_template, large_data)
 - 스키마 보강 (model_type provider/api_model/is_active)
 - 시드 데이터 삽입/업데이트 (모델 목록, 기본 시스템 프롬프트)
 
@@ -14,7 +14,7 @@ import asyncio
 import os
 from sqlalchemy import text
 from db.database import engine, Base, AsyncSessionLocal
-from db.models import ChatSession, ChatMessage, ModelType, PromptTemplate, LargeData
+from db.models import ChatSession, ModelType, PromptTemplate, LargeData
 from db.model_type_migration import ensure_model_type_schema
 
 
@@ -24,14 +24,20 @@ async def create_tables():
     print("✅ 테이블 생성 완료")
 
 
-async def ensure_chat_message_columns(eng):
-    """chat_message 테이블에 tool_call_id, tool_name 컬럼 추가 (이미 있으면 무시)"""
+async def migrate_to_checkpoint_messages(eng):
+    """chat_message → checkpoint 마이그레이션: thread_id 컬럼 추가 + chat_message 테이블 DROP"""
     async with eng.begin() as conn:
-        for col, col_type in [("tool_call_id", "VARCHAR"), ("tool_name", "VARCHAR")]:
-            await conn.execute(text(f"""
-                ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS {col} {col_type}
-            """))
-    print("✅ chat_message 컬럼 보강 완료 (tool_call_id, tool_name)")
+        # 1. chat_session에 thread_id 컬럼 추가 (이미 있으면 무시)
+        await conn.execute(text("""
+            ALTER TABLE chat_session ADD COLUMN IF NOT EXISTS thread_id VARCHAR UNIQUE
+        """))
+        print("✅ chat_session.thread_id 컬럼 추가 완료")
+
+        # 2. chat_message 테이블 DROP (존재하면)
+        await conn.execute(text("""
+            DROP TABLE IF EXISTS chat_message CASCADE
+        """))
+        print("✅ chat_message 테이블 DROP 완료")
 
 
 async def seed_models():
@@ -56,7 +62,10 @@ async def seed_models():
                 ('Gemini 2.5 Flash', 'gemini-2.5-flash', 'GEMINI', 'gemini-2.5-flash', TRUE, 'Google 빠른 추론 모델'),
                 ('Gemini 2.0 Flash', 'gemini-2.0-flash', 'GEMINI', 'gemini-2.0-flash', TRUE, 'Google 경량 범용 모델'),
                 ('OCI Llama 3.3 70B', 'oci-llama-3.3-70b', 'OCI', COALESCE(NULLIF(:oci_model_id, ''), 'meta.llama-3.3-70b-instruct'), TRUE, 'OCI Llama 모델'),
-                ('Local Llama3.1', 'local-llama3.1', 'LOCAL', 'llama3.1:8b', FALSE, '로컬 모델 (구현 전)')
+                ('Local Llama3.1', 'local-llama3.1', 'LOCAL', 'llama3.1:8b', FALSE, '로컬 모델 (구현 전)'),
+                ('OpenRouter Claude Sonnet', 'or-claude-sonnet', 'OPENROUTER', 'anthropic/claude-sonnet-4', FALSE, 'OpenRouter via Claude Sonnet'),
+                ('Qwen 3.5 122B A10B', 'or-qwen3.5-122b', 'OPENROUTER', 'qwen/qwen3.5-122b-a10b', TRUE, 'Qwen 3.5 MoE 대형 모델'),
+                ('Qwen 3.5 35B A3B', 'or-qwen3.5-35b', 'OPENROUTER', 'qwen/qwen3.5-35b-a3b', TRUE, 'Qwen 3.5 MoE 경량 모델')
             ON CONFLICT (model_type) DO UPDATE SET
                 model_name = EXCLUDED.model_name,
                 provider = EXCLUDED.provider,
@@ -110,7 +119,7 @@ async def seed_prompts():
 async def main():
     print("🚀 DB 초기화 시작...")
     await create_tables()
-    await ensure_chat_message_columns(engine)
+    await migrate_to_checkpoint_messages(engine)
     await ensure_model_type_schema(engine)
     print("✅ model_type 스키마 보강 완료")
     await seed_models()

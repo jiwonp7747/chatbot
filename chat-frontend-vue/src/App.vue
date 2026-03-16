@@ -10,14 +10,24 @@
     <SidebarPanel
       :sessions="store.sessions"
       :current-session-id="store.currentSessionId"
+      :collapsed="sidebarCollapsed"
       @session-select="store.selectSession"
       @new-chat="store.newChat"
       @mcp-tools-open="openMcpToolsPanel"
       @rag-tags-open="openRagTagsPanel"
       @session-delete="handleSessionDelete"
       @session-rename="handleSessionRename"
+      @toggle-sidebar="toggleSidebar"
     />
     <div class="main-content">
+      <button
+        v-if="sidebarCollapsed"
+        class="sidebar-expand-btn"
+        aria-label="사이드바 펼치기"
+        @click="toggleSidebar"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
       <WelcomePage
         v-if="!store.currentSession"
         :selected-model="store.selectedModel"
@@ -70,6 +80,12 @@ import McpToolsPanel from './components/McpToolsPanel.vue';
 import RagTagsPanel from './components/RagTagsPanel.vue';
 import { chatService } from './services/chatService';
 import type { McpTool, TagTreeNode } from './types/chat';
+
+const sidebarCollapsed = ref(false);
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+}
 
 const store = useChatStore();
 const isMcpPanelOpen = ref(false);
@@ -214,5 +230,29 @@ function openRagTagsPanel() {
   overflow: hidden;
   position: relative;
   z-index: 1;
+}
+
+.sidebar-expand-btn {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.sidebar-expand-btn:hover {
+  background: var(--glass-hover);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 </style>
