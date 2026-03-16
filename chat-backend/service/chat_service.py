@@ -111,8 +111,8 @@ async def get_chat_messages(
         channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
         messages = channel_values.get("messages", [])
 
-        # 4. HumanMessage/AIMessage만 필터링하여 프론트 포맷으로 변환
-        from langchain_core.messages import HumanMessage, AIMessage
+        # 4. HumanMessage/AIMessage/ToolMessage만 필터링하여 프론트 포맷으로 변환
+        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
         result = []
         for idx, msg in enumerate(messages):
             if isinstance(msg, HumanMessage):
@@ -140,6 +140,18 @@ async def get_chat_messages(
                         "content": content,
                         "created_at": None,
                     })
+            elif isinstance(msg, ToolMessage):
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                additional_kwargs = msg.additional_kwargs or {}
+                result.append({
+                    "id": str(idx),
+                    "role": "tool",
+                    "content": content,
+                    "created_at": None,
+                    "tool_name": getattr(msg, "name", None),
+                    "tool_call_id": getattr(msg, "tool_call_id", None),
+                    "data_ref_type": additional_kwargs.get("data_ref_type"),
+                })
 
         logger.info(f"✅ checkpoint에서 메시지 {len(result)}개 추출: thread={thread_id}")
         return result
@@ -147,6 +159,76 @@ async def get_chat_messages(
         logger.error(f"❌ checkpoint 메시지 추출 실패: {e}")
         return []
 
+
+
+async def get_tool_result(
+        thread_id: str,
+        tool_call_id: str,
+):
+    """체크포인트에서 특정 ToolMessage의 상세 데이터를 반환"""
+    from ai.checkpointer import get_checkpointer
+    from langchain_core.messages import ToolMessage
+
+    checkpointer = get_checkpointer()
+    if not checkpointer:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, "checkpointer가 초기화되지 않음")
+
+    config = {"configurable": {"thread_id": thread_id}}
+    checkpoint_tuple = await checkpointer.aget_tuple(config)
+    if not checkpoint_tuple:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, "체크포인트를 찾을 수 없습니다")
+
+    channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
+    messages = channel_values.get("messages", [])
+
+    # tool_call_id로 해당 ToolMessage 찾기
+    target_msg = None
+    for msg in messages:
+        if isinstance(msg, ToolMessage) and getattr(msg, "tool_call_id", None) == tool_call_id:
+            target_msg = msg
+            break
+
+    if not target_msg:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, f"tool_call_id={tool_call_id}에 해당하는 ToolMessage를 찾을 수 없습니다")
+
+    additional_kwargs = target_msg.additional_kwargs or {}
+    data_ref_type = additional_kwargs.get("data_ref_type")
+
+    if data_ref_type == "artifact":
+        # 체크포인트에 저장된 artifact 반환
+        return {
+            "tool_call_id": tool_call_id,
+            "tool_name": getattr(target_msg, "name", None),
+            "data_ref_type": "artifact",
+            "data": target_msg.artifact,
+        }
+    elif data_ref_type == "file":
+        # DatabaseBackend(PostgreSQL large_data 테이블)에서 읽기
+        file_path = additional_kwargs.get("file_path")
+        if not file_path:
+            raise ApiException(FailureCode.NOT_FOUND_DATA, "파일 경로가 없습니다")
+
+        from ai.backend.file_system_backend import get_database_backend
+        backend = get_database_backend()
+        file_content = await backend.aread(file_path, offset=0, limit=100000)
+
+        if file_content.startswith("Error: file not found"):
+            raise ApiException(FailureCode.NOT_FOUND_DATA, f"파일을 찾을 수 없습니다: {file_path}")
+
+        return {
+            "tool_call_id": tool_call_id,
+            "tool_name": getattr(target_msg, "name", None),
+            "data_ref_type": "file",
+            "data": file_content,
+        }
+    else:
+        # data_ref_type이 없는 경우, content 자체를 반환
+        return {
+            "tool_call_id": tool_call_id,
+            "tool_name": getattr(target_msg, "name", None),
+            "data_ref_type": None,
+            "data": target_msg.content,
+        }
 
 
 async def get_available_model_list(
