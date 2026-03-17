@@ -203,13 +203,13 @@ async def get_tool_result(
             "data": target_msg.artifact,
         }
     elif data_ref_type == "file":
-        # DatabaseBackend(PostgreSQL large_data 테이블)에서 읽기
+        # FileBackend에서 읽기
         file_path = additional_kwargs.get("file_path")
         if not file_path:
             raise ApiException(FailureCode.NOT_FOUND_DATA, "파일 경로가 없습니다")
 
-        from ai.backend.file_system_backend import get_database_backend
-        backend = get_database_backend()
+        from ai.backend import get_s3_backend
+        backend = get_s3_backend()
         file_content = await backend.aread(file_path, offset=0, limit=100000)
 
         if file_content.startswith("Error: file not found"):

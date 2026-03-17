@@ -40,6 +40,7 @@
         :streaming-content="store.currentStreamingContent"
         :is-streaming="store.isStreaming"
         @model-change="store.updateSessionModel"
+        @open-checkpoint="openCheckpointPanel"
       />
       <ChatInput
         :is-streaming="store.isStreaming"
@@ -50,6 +51,15 @@
       />
     </div>
 
+    <CheckpointPanel
+      :open="isCheckpointPanelOpen"
+      :graph="checkpointGraph"
+      :loading="isCheckpointLoading"
+      :error="checkpointError"
+      @close="isCheckpointPanelOpen = false"
+      @retry="loadCheckpointGraph"
+      @node-click="handleCheckpointNodeClick"
+    />
     <McpToolsPanel
       :open="isMcpPanelOpen"
       :tools="mcpTools"
@@ -78,8 +88,9 @@ import WelcomePage from './pages/WelcomePage.vue';
 import ChatPage from './pages/ChatPage.vue';
 import McpToolsPanel from './components/McpToolsPanel.vue';
 import RagTagsPanel from './components/RagTagsPanel.vue';
+import CheckpointPanel from './components/CheckpointPanel.vue';
 import { chatService } from './services/chatService';
-import type { McpTool, TagTreeNode } from './types/chat';
+import type { McpTool, TagTreeNode, CheckpointGraph, CheckpointNode } from './types/chat';
 
 const sidebarCollapsed = ref(false);
 
@@ -97,6 +108,11 @@ const isRagPanelOpen = ref(false);
 const isRagTagsLoading = ref(false);
 const ragTagsError = ref<string | null>(null);
 const ragTags = ref<TagTreeNode[]>([]);
+
+const isCheckpointPanelOpen = ref(false);
+const isCheckpointLoading = ref(false);
+const checkpointError = ref<string | null>(null);
+const checkpointGraph = ref<CheckpointGraph | null>(null);
 
 onMounted(() => {
   store.loadSessions();
@@ -160,6 +176,32 @@ function openRagTagsPanel() {
   if (ragTags.value.length === 0 && !isRagTagsLoading.value) {
     loadRagTags();
   }
+}
+
+async function loadCheckpointGraph() {
+  if (!store.currentSessionId) return;
+
+  isCheckpointLoading.value = true;
+  checkpointError.value = null;
+
+  try {
+    checkpointGraph.value = await chatService.fetchCheckpointGraph(store.currentSessionId);
+  } catch (error) {
+    console.error('Checkpoint 그래프 조회 실패:', error);
+    checkpointError.value = 'Checkpoint 그래프를 불러오지 못했습니다.';
+  } finally {
+    isCheckpointLoading.value = false;
+  }
+}
+
+function openCheckpointPanel() {
+  isCheckpointPanelOpen.value = true;
+  loadCheckpointGraph();
+}
+
+function handleCheckpointNodeClick(node: CheckpointNode) {
+  console.log('[App] Checkpoint 노드 선택:', node);
+  // TODO: 해당 체크포인트로 되돌아가는 기능 추가 예정
 }
 </script>
 
@@ -255,4 +297,5 @@ function openRagTagsPanel() {
   background: var(--glass-hover);
   border-color: rgba(255, 255, 255, 0.12);
 }
+
 </style>

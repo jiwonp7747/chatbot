@@ -5,7 +5,7 @@
 FilesystemMiddleware를 상속하여 read_file/grep 등 파일 도구를 자동 제공합니다.
 """
 import logging
-from typing import override, Callable
+from typing import override, Callable, Awaitable
 
 from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.messages import ToolMessage
@@ -36,6 +36,23 @@ class LargeDataMiddleware(FilesystemMiddleware):
         handler: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
         result = handler(request)
+        return self._process_tool_result(result, request)
+
+    @override
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        result = await handler(request)
+        return self._process_tool_result(result, request)
+
+    def _process_tool_result(
+        self, result: ToolMessage | Command, request: ToolCallRequest
+    ) -> ToolMessage | Command:
+        """sync/async 공통 도구 결과 처리 로직"""
+        tool_name = request.tool_call.get("name", "unknown")
+        logger.info(f"[LargeData] 도구 결과 처리: tool={tool_name}, result_type={type(result).__name__}")
 
         if isinstance(result, ToolMessage):
             artifact = result.artifact
@@ -44,17 +61,16 @@ class LargeDataMiddleware(FilesystemMiddleware):
             if artifact is not None:
                 artifact_str = str(artifact)
                 artifact_size = len(artifact_str)
+                logger.info(f"[LargeData] tool={tool_name}, type=artifact, size={artifact_size}bytes, threshold={self.threshold}")
 
                 if artifact_size > self.threshold:
-                    # artifact가 크면 파일에 저장
                     resolved = self._get_backend(request.runtime)
-                    tool_name = request.tool_call["name"]
                     tool_call_id = request.tool_call["id"]
                     thread_id = request.runtime.config["configurable"]["thread_id"]
                     output_path = f"/data/{thread_id}/{tool_name}_{tool_call_id}.jsonl"
 
                     resolved.write(output_path, artifact_str)
-                    logger.info(f"`{tool_name}` 도구의 artifact가 너무 크기 때문에 `{output_path}`에 저장했습니다.")
+                    logger.info(f"[LargeData] S3 저장 완료: tool={tool_name}, path={output_path}, size={artifact_size}bytes")
 
                     additional_kwargs["data_ref_type"] = "file"
                     additional_kwargs["file_path"] = output_path
@@ -68,23 +84,23 @@ class LargeDataMiddleware(FilesystemMiddleware):
                         ),
                     })
                 else:
-                    # artifact가 작으면 checkpoint에 유지
+                    logger.info(f"[LargeData] 인라인 유지: tool={tool_name}, size={artifact_size}bytes (threshold 미만)")
                     additional_kwargs["data_ref_type"] = "artifact"
                     return result.model_copy(update={
                         "additional_kwargs": additional_kwargs,
                     })
             else:
-                # artifact 없음: 기존 content 크기 체크 로직
                 content_str = str(result.content)
-                if len(content_str) > self.threshold:
+                content_size = len(content_str)
+                logger.info(f"[LargeData] tool={tool_name}, type=content, size={content_size}bytes, threshold={self.threshold}")
+                if content_size > self.threshold:
                     resolved = self._get_backend(request.runtime)
-                    tool_name = request.tool_call["name"]
                     tool_call_id = request.tool_call["id"]
                     thread_id = request.runtime.config["configurable"]["thread_id"]
                     output_path = f"/data/{thread_id}/{tool_name}_{tool_call_id}.jsonl"
 
                     resolved.write(output_path, content_str)
-                    logger.info(f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 `{output_path}`에 저장했습니다.")
+                    logger.info(f"[LargeData] S3 저장 완료: tool={tool_name}, path={output_path}, size={content_size}bytes")
 
                     additional_kwargs["data_ref_type"] = "file"
                     additional_kwargs["file_path"] = output_path

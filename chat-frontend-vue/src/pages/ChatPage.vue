@@ -1,10 +1,28 @@
 <template>
   <div class="chat-header">
     <h2 class="chat-title">{{ session.title }}</h2>
-    <ModelSelector
-      :selected-model="session.model"
-      @model-change="emit('model-change', $event)"
-    />
+    <div class="chat-header-actions">
+      <ModelSelector
+        :selected-model="session.model"
+        @model-change="emit('model-change', $event)"
+      />
+      <button
+        class="checkpoint-toggle-btn"
+        aria-label="Checkpoint Graph 열기"
+        title="Checkpoint Graph"
+        @click="emit('open-checkpoint')"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="5" r="2"/>
+          <circle cx="7" cy="12" r="2"/>
+          <circle cx="17" cy="12" r="2"/>
+          <circle cx="12" cy="19" r="2"/>
+          <line x1="12" y1="7" x2="7" y2="10"/>
+          <line x1="12" y1="7" x2="17" y2="10"/>
+          <line x1="12" y1="17" x2="12" y2="14"/>
+        </svg>
+      </button>
+    </div>
   </div>
   <div class="messages-container" ref="messagesContainerRef">
     <ChatMessage
@@ -305,6 +323,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'model-change': [model: ModelType];
+  'open-checkpoint': [];
 }>();
 
 const currentSubProgress = computed(() => {
@@ -471,6 +490,32 @@ watch(
 </script>
 
 <style scoped>
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkpoint-toggle-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.checkpoint-toggle-btn:hover {
+  background: var(--glass-hover);
+  border-color: var(--glass-border);
+  color: var(--text-1);
+}
+
 .chat-header {
   display: flex;
   align-items: center;

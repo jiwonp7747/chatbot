@@ -8,6 +8,7 @@ import {
   getRagTagsUrl,
   getResumeChatUrl,
   getToolSchemasUrl,
+  getCheckpointGraphUrl,
 } from '../config/api';
 import {
   ChatRequest,
@@ -24,6 +25,8 @@ import {
   RagTagsApiResponse,
   TagTreeNode,
   ToolSchema,
+  CheckpointGraph,
+  CheckpointGraphApiResponse,
 } from '../types/chat';
 import Cookies from "js-cookie";
 
@@ -282,6 +285,7 @@ export class ChatService {
         role: msg.role,
         content: msg.content,
         timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+        ...(msg.tool_name && { tool_name: msg.tool_name }),
       }));
 
     } catch (error) {
@@ -408,6 +412,29 @@ export class ChatService {
     const apiResponse: ApiResponse<ToolSchema[]> = await response.json();
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || '도구 스키마를 불러오는데 실패했습니다.');
+    }
+
+    return apiResponse.data;
+  }
+
+  async fetchCheckpointGraph(threadId: string): Promise<CheckpointGraph> {
+    const url = getCheckpointGraphUrl(threadId);
+    const token = Cookies.get('LOGIN_TOKEN');
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const apiResponse: CheckpointGraphApiResponse = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || 'Checkpoint 그래프를 불러오는데 실패했습니다.');
     }
 
     return apiResponse.data;

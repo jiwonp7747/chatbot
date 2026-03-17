@@ -1,11 +1,11 @@
 <template>
   <div :class="['message', message.role]">
     <div class="msg-avatar">
-      {{ message.role === 'user' ? avatarInitial : 'Bi' }}
+      {{ message.role === 'user' ? avatarInitial : message.role === 'tool' ? '⚙' : 'Bi' }}
     </div>
     <div class="msg-body">
       <div class="msg-meta">
-        <span class="msg-name">{{ message.role === 'user' ? 'You' : 'Bistelligence' }}</span>
+        <span class="msg-name">{{ message.role === 'user' ? 'You' : message.role === 'tool' ? `Tool Result - ${message.tool_name || 'unknown'}` : 'Bistelligence' }}</span>
         <span class="msg-time">{{ formatTime(message.timestamp) }}</span>
       </div>
       <div class="msg-content" v-html="renderedContent" />
@@ -82,6 +82,13 @@ function formatTime(timestamp: number): string {
   background: linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.05));
   border: 1px solid rgba(52,211,153,0.2);
   color: var(--emerald);
+}
+
+.message.tool .msg-avatar {
+  background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05));
+  border: 1px solid rgba(251,191,36,0.2);
+  color: #fbbf24;
+  font-size: 16px;
 }
 
 /* Message Body */

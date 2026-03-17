@@ -87,9 +87,10 @@ export interface ResumeRequest {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: number;
+  tool_name?: string;
 }
 
 export interface ChatSession {
@@ -122,7 +123,8 @@ export interface MessageData {
   id: string;
   content: string;
   created_at: string | null;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
+  tool_name?: string;
 }
 
 export interface MessagesApiResponse {
@@ -171,3 +173,20 @@ export interface TagTreeNode {
 }
 
 export type RagTagsApiResponse = ApiResponse<TagTreeNode[]>;
+
+// Checkpoint Graph 타입
+export interface CheckpointNode {
+  checkpoint_id: string;
+  parent_checkpoint_id: string | null;
+  step: number | null;
+  source: string | null;
+  checkpoint_ns: string;
+  is_head: boolean;
+}
+
+export interface CheckpointGraph {
+  thread_id: string;
+  nodes: CheckpointNode[];
+}
+
+export type CheckpointGraphApiResponse = ApiResponse<CheckpointGraph>;

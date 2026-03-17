@@ -21,6 +21,7 @@ export const API_CONFIG = {
     ragTags: '/rag/tags/tree',
     resumeChat: '/chat/resume',
     toolSchemas: '/chat/tool-schemas',
+    checkpointGraph: '/checkpoint/graph',
   }
 };
 
@@ -62,4 +63,9 @@ export const getResumeChatUrl = (): string => {
 
 export const getToolSchemasUrl = (): string => {
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.toolSchemas}`;
+};
+
+export const getCheckpointGraphUrl = (threadId: string, checkpointNs: string = ''): string => {
+  const params = new URLSearchParams({ thread_id: threadId, checkpoint_ns: checkpointNs });
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.checkpointGraph}?${params.toString()}`;
 };

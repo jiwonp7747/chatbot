@@ -32,7 +32,7 @@ from opentelemetry.trace import StatusCode
 from ai.agents.rag_agent import create_rag_subagent
 from ai.agents.tool_agent import create_tool_subagent
 from ai.agents.fab_trace_agent import create_fab_trace_subagent
-from ai.backend import get_database_backend
+from ai.backend import get_s3_backend
 from ai.checkpointer import get_checkpointer
 from ai.middleware.large_data_middleware import create_large_data_middleware
 from ai.graph.schema.graph_state import ChatGraphState
@@ -354,14 +354,14 @@ class Orchestrator:
     async def _build_main_agent(self, model_string: str, model_kwargs: dict | None = None):
         """서브에이전트를 구성하고 Deep Agent 생성"""
         mcp_tools = await self._load_mcp_tools()
-        backend = get_database_backend()
+        backend = get_s3_backend()
         large_data_mw = create_large_data_middleware(backend)
         tool_call_review_mw = create_tool_call_review_middleware(model_string, 1)
         tool_call_inject_mw = create_tool_call_inject_middleware(model_string)
 
         subagents = [
             create_rag_subagent(),
-            create_fab_trace_subagent(),
+            create_fab_trace_subagent(middleware=[large_data_mw]),
         ]
         if mcp_tools:
             # large_data_mw
