@@ -9,24 +9,146 @@
         <span class="msg-time">{{ formatTime(message.timestamp) }}</span>
       </div>
       <div class="msg-content" v-html="renderedContent" />
+      <!-- 서브에이전트 메시지 (접기/펼치기) -->
+      <div v-if="message.sub_messages && message.sub_messages.length > 0" class="sub-messages">
+        <button class="sub-messages-toggle" @click="subMessagesExpanded = !subMessagesExpanded">
+          <svg :class="['toggle-icon', { expanded: subMessagesExpanded }]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+          {{ message.agent_name || '서브에이전트' }} 대화 내역 ({{ message.sub_messages.length }}개)
+        </button>
+        <div v-if="subMessagesExpanded" class="sub-messages-list">
+          <div
+            v-for="sub in message.sub_messages"
+            :key="sub.id"
+            :class="['sub-message', sub.role]"
+          >
+            <span class="sub-role">{{ sub.role === 'user' ? '입력' : sub.role === 'assistant' ? 'AI' : sub.tool_name || 'Tool' }}</span>
+            <span class="sub-content">{{ sub.content }}</span>
+          </div>
+        </div>
+      </div>
+      <!-- Tool message 액션 버튼 -->
+      <div v-if="message.role === 'tool' && message.data_ref_type" class="tool-actions">
+        <button
+          v-if="message.data_ref_type === 'artifact'"
+          class="tool-action-btn artifact-btn"
+          :disabled="isLoadingArtifact"
+          @click="handleViewArtifact"
+        >
+          {{ isLoadingArtifact ? '로딩 중...' : '📊 데이터 조회' }}
+        </button>
+        <button
+          v-if="message.data_ref_type === 'file'"
+          class="tool-action-btn file-btn"
+          @click="handleDownloadFile"
+        >
+          📥 다운로드
+        </button>
+      </div>
+      <!-- Artifact 테이블 뷰 -->
+      <div v-if="artifactData" class="artifact-table-container">
+        <div class="artifact-table-header">
+          <span class="artifact-table-title">{{ artifactData.tool_name || '결과' }}</span>
+          <button class="artifact-close-btn" @click="artifactData = null">✕</button>
+        </div>
+        <div v-if="artifactTableData" class="artifact-table-wrap">
+          <table class="artifact-table">
+            <thead>
+              <tr>
+                <th v-for="col in artifactTableData.columns" :key="col">{{ col }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, idx) in artifactTableData.rows" :key="idx">
+                <td v-for="(cell, cidx) in row" :key="cidx">{{ cell }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="artifact-raw">
+          <pre>{{ JSON.stringify(artifactData.data, null, 2) }}</pre>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useMarkdown } from '../composables/useMarkdown';
-import type { Message } from '../types/chat';
+import { useChatStore } from '../stores/chatStore';
+import { getToolResultDownloadUrl } from '../config/api';
+import { chatService } from '../services/chatService';
+import type { Message, ToolResultData } from '../types/chat';
 
 const props = defineProps<{
   message: Message;
 }>();
 
 const { renderMarkdown } = useMarkdown();
+const chatStore = useChatStore();
 
 const avatarInitial = 'J';
 
 const renderedContent = computed(() => renderMarkdown(props.message.content));
+
+// tool 메시지 렌더링 시 data_ref_type 로그
+if (props.message.role === 'tool') {
+  console.log('[ToolMessage] 렌더링', {
+    toolName: props.message.tool_name,
+    toolCallId: props.message.tool_call_id,
+    dataRefType: props.message.data_ref_type ?? 'null',
+  });
+}
+
+const subMessagesExpanded = ref(false);
+const isLoadingArtifact = ref(false);
+const artifactData = ref<ToolResultData | null>(null);
+
+const artifactTableData = computed(() => {
+  if (!artifactData.value?.data) return null;
+  const data = artifactData.value.data as Record<string, unknown>;
+  if (data.type === 'table' && Array.isArray(data.columns) && Array.isArray(data.rows)) {
+    return { columns: data.columns as string[], rows: data.rows as unknown[][] };
+  }
+  return null;
+});
+
+async function handleViewArtifact() {
+  if (!props.message.tool_call_id || !chatStore.currentSessionId) return;
+  console.log('[ToolAction] 데이터 조회 클릭', {
+    action: 'artifact',
+    threadId: chatStore.currentSessionId,
+    toolCallId: props.message.tool_call_id,
+    toolName: props.message.tool_name,
+  });
+  isLoadingArtifact.value = true;
+  try {
+    artifactData.value = await chatService.fetchToolResult(
+      chatStore.currentSessionId,
+      props.message.tool_call_id,
+    );
+    console.log('[ToolAction] artifact 응답 수신', artifactData.value);
+  } catch (e) {
+    console.error('[ToolAction] artifact 조회 실패:', e);
+  } finally {
+    isLoadingArtifact.value = false;
+  }
+}
+
+function handleDownloadFile() {
+  if (!props.message.tool_call_id || !chatStore.currentSessionId) return;
+  const url = getToolResultDownloadUrl(chatStore.currentSessionId, props.message.tool_call_id);
+  console.log('[ToolAction] 파일 다운로드 클릭', {
+    action: 'file',
+    threadId: chatStore.currentSessionId,
+    toolCallId: props.message.tool_call_id,
+    toolName: props.message.tool_name,
+    downloadUrl: url,
+  });
+  window.open(url, '_blank');
+}
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString('ko-KR', {
@@ -364,5 +486,210 @@ function formatTime(timestamp: number): string {
 .msg-content :deep(pre code.language-css .hljs-string),
 .msg-content :deep(pre code.language-css .hljs-number) {
   color: #98c379;
+}
+
+/* Tool Action Buttons */
+.tool-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tool-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-1);
+}
+
+.tool-action-btn:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.tool-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.artifact-btn:hover {
+  border-color: rgba(129,140,248,0.4);
+  color: var(--accent);
+}
+
+.file-btn:hover {
+  border-color: rgba(52,211,153,0.4);
+  color: var(--emerald);
+}
+
+/* Artifact Table */
+.artifact-table-container {
+  margin-top: 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.2);
+}
+
+.artifact-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.artifact-table-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+
+.artifact-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.artifact-close-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-0);
+}
+
+.artifact-table-wrap {
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.artifact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.artifact-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(0,0,0,0.4);
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-0);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.artifact-table td {
+  padding: 6px 12px;
+  color: var(--text-1);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.artifact-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.artifact-raw {
+  padding: 12px 16px;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.artifact-raw pre {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-1);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Sub-agent messages */
+.sub-messages {
+  margin-top: 8px;
+  border-left: 2px solid var(--glass-border);
+  padding-left: 12px;
+}
+
+.sub-messages-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: color 0.2s ease;
+}
+
+.sub-messages-toggle:hover {
+  color: var(--text-0);
+}
+
+.toggle-icon {
+  transition: transform 0.2s ease;
+}
+
+.toggle-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.sub-messages-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sub-message {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--glass-bg) 50%, transparent);
+}
+
+.sub-message.user {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.sub-message.tool {
+  background: color-mix(in srgb, #fbbf24 5%, transparent);
+}
+
+.sub-role {
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  min-width: 36px;
+}
+
+.sub-message.user .sub-role { color: var(--accent); }
+.sub-message.assistant .sub-role { color: var(--emerald); }
+.sub-message.tool .sub-role { color: #fbbf24; }
+
+.sub-content {
+  color: var(--text-2);
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 </style>

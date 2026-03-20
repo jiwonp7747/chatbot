@@ -199,9 +199,19 @@ function openCheckpointPanel() {
   loadCheckpointGraph();
 }
 
-function handleCheckpointNodeClick(node: CheckpointNode) {
-  console.log('[App] Checkpoint 노드 선택:', node);
-  // TODO: 해당 체크포인트로 되돌아가는 기능 추가 예정
+async function handleCheckpointNodeClick(node: CheckpointNode) {
+  if (!store.currentSessionId) return;
+
+  try {
+    const messages = await chatService.fetchMessages(store.currentSessionId, node.checkpoint_id);
+    const idx = store.sessions.findIndex(s => s.id === store.currentSessionId);
+    if (idx !== -1) {
+      store.sessions[idx] = { ...store.sessions[idx], messages };
+    }
+    console.log(`[App] Checkpoint ${node.checkpoint_id.slice(0, 8)} 시점으로 메시지 로드 완료 (${messages.length}개)`);
+  } catch (error) {
+    console.error('Checkpoint 메시지 로드 실패:', error);
+  }
 }
 </script>
 

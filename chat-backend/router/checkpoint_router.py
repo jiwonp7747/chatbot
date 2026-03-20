@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import Depends, APIRouter, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import service.checkpoint_service as checkpoint_service
@@ -19,7 +21,7 @@ async def get_checkpoints_by_thread_id(
 @router.get("/graph")
 async def get_checkpoint_graph(
     thread_id: str = Query(...),
-    checkpoint_ns: str = Query(default=""),
+    checkpoint_ns: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """checkpoint 그래프 조회 — 트리 구조의 nodes 반환 (blob 역직렬화 없이 빠름)"""
@@ -37,3 +39,18 @@ async def get_checkpoint_messages(
         thread_id, checkpoint_id, checkpoint_ns,
     )
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, messages)
+
+@router.get("/debug")
+async def get_checkpoint_debug(
+    thread_id: str = Query(...),
+    checkpoint_id: str = Query(...),
+    checkpoint_ns: str = Query(default=""),
+):
+    """디버깅용: 특정 checkpoint의 전체 state 상세 조회
+
+    모든 채널 값, 메시지별 타입/필드/metadata 포함.
+    """
+    debug_data = await checkpoint_service.get_checkpoint_debug(
+        thread_id, checkpoint_id, checkpoint_ns,
+    )
+    return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, debug_data)

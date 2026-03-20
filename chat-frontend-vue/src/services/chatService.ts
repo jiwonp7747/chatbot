@@ -9,6 +9,8 @@ import {
   getResumeChatUrl,
   getToolSchemasUrl,
   getCheckpointGraphUrl,
+  getToolResultUrl,
+  getToolResultDownloadUrl,
 } from '../config/api';
 import {
   ChatRequest,
@@ -27,6 +29,7 @@ import {
   ToolSchema,
   CheckpointGraph,
   CheckpointGraphApiResponse,
+  ToolResultData,
 } from '../types/chat';
 import Cookies from "js-cookie";
 
@@ -258,9 +261,9 @@ export class ChatService {
     }
   }
 
-  async fetchMessages(sessionId: string): Promise<Message[]> {
+  async fetchMessages(sessionId: string, checkpointId?: string): Promise<Message[]> {
     try {
-      const url = getMessagesUrl(sessionId);
+      const url = getMessagesUrl(sessionId, checkpointId);
       const token = Cookies.get('LOGIN_TOKEN');
       const response = await fetch(url, {
         method: 'GET',
@@ -286,6 +289,10 @@ export class ChatService {
         content: msg.content,
         timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
         ...(msg.tool_name && { tool_name: msg.tool_name }),
+        ...(msg.tool_call_id && { tool_call_id: msg.tool_call_id }),
+        ...(msg.data_ref_type && { data_ref_type: msg.data_ref_type }),
+        ...(msg.agent_name && { agent_name: msg.agent_name }),
+        ...(msg.sub_messages && { sub_messages: msg.sub_messages }),
       }));
 
     } catch (error) {
@@ -412,6 +419,29 @@ export class ChatService {
     const apiResponse: ApiResponse<ToolSchema[]> = await response.json();
     if (!apiResponse.success) {
       throw new Error(apiResponse.message || '도구 스키마를 불러오는데 실패했습니다.');
+    }
+
+    return apiResponse.data;
+  }
+
+  async fetchToolResult(threadId: string, toolCallId: string): Promise<ToolResultData> {
+    const url = getToolResultUrl(threadId, toolCallId);
+    const token = Cookies.get('LOGIN_TOKEN');
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const apiResponse: ApiResponse<ToolResultData> = await response.json();
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.message || '도구 결과를 불러오는데 실패했습니다.');
     }
 
     return apiResponse.data;

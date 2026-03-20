@@ -30,6 +30,13 @@ export interface ToolArtifact {
   meta?: Record<string, unknown>;
 }
 
+export interface ToolResultData {
+  tool_call_id: string;
+  tool_name?: string;
+  data_ref_type?: 'artifact' | 'file' | null;
+  data: unknown;
+}
+
 export interface ChatResponse {
   content: string;
   status: 'progress' | 'streaming' | 'done' | 'error' | 'confirm' | 'sub_progress';
@@ -85,12 +92,24 @@ export interface ResumeRequest {
   edited_tool_calls?: EditedToolCall[];  // EDIT decision용
 }
 
+export interface SubMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  tool_name?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: number;
   tool_name?: string;
+  tool_call_id?: string;
+  data_ref_type?: 'artifact' | 'file' | null;
+  // 서브에이전트 메시지
+  agent_name?: string;
+  sub_messages?: SubMessage[];
 }
 
 export interface ChatSession {
@@ -125,6 +144,11 @@ export interface MessageData {
   created_at: string | null;
   role: 'user' | 'assistant' | 'tool';
   tool_name?: string;
+  tool_call_id?: string;
+  data_ref_type?: 'artifact' | 'file' | null;
+  // 서브에이전트 메시지
+  agent_name?: string;
+  sub_messages?: SubMessage[];
 }
 
 export interface MessagesApiResponse {
@@ -182,6 +206,9 @@ export interface CheckpointNode {
   source: string | null;
   checkpoint_ns: string;
   is_head: boolean;
+  // New fields
+  agent_name: string | null;
+  summary: string | null;
 }
 
 export interface CheckpointGraph {
@@ -190,3 +217,11 @@ export interface CheckpointGraph {
 }
 
 export type CheckpointGraphApiResponse = ApiResponse<CheckpointGraph>;
+
+// Tool Result 타입
+export interface ToolResultData {
+  tool_call_id: string;
+  tool_name?: string;
+  data_ref_type?: 'artifact' | 'file' | null;
+  data: unknown;
+}

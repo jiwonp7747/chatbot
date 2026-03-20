@@ -46,9 +46,15 @@
               <div class="node-header">
                 <span class="node-step" v-if="node.step !== null">Step {{ node.step }}</span>
                 <span class="node-badge" v-if="node.is_head">HEAD</span>
+                <span class="node-source-badge" v-if="node.source">{{ node.source }}</span>
+              </div>
+              <div class="node-agent" v-if="node.agent_name">
+                {{ node.agent_name }}
+              </div>
+              <div class="node-summary" v-if="node.summary">
+                {{ node.summary }}
               </div>
               <div class="node-id">{{ node.checkpoint_id.slice(0, 8) }}...</div>
-              <div class="node-source" v-if="node.source">{{ node.source }}</div>
             </div>
           </div>
         </div>
@@ -370,5 +376,36 @@ function onNodeClick(node: CheckpointNode) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--text-2) 15%, transparent);
+  color: var(--text-2);
+}
+
+.node-agent {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-summary {
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 2px;
+  line-height: 1.4;
 }
 </style>

@@ -1,6 +1,8 @@
-from fastapi import Depends, APIRouter
+from fastapi import Depends, APIRouter, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
+import io
 
 from common.response.code import SuccessCode
 from common.response.response_template import ResponseTemplate
@@ -25,9 +27,10 @@ async def read_sessions(
 )
 async def read_messages(
     thread_id: str,
+    checkpoint_id: Optional[str] = Query(default=None, description="특정 체크포인트 시점의 메시지 조회"),
     db: AsyncSession = Depends(get_db),
 ):
-    messages = await chat_service.get_chat_messages(thread_id, db)
+    messages = await chat_service.get_chat_messages(thread_id, db, checkpoint_id=checkpoint_id)
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, messages)
 
 @router.get(
@@ -39,6 +42,20 @@ async def read_tool_result(
 ):
     result = await chat_service.get_tool_result(thread_id, tool_call_id)
     return ResponseTemplate.success(SuccessCode.SUCCESS_CODE, result)
+
+@router.get(
+    "/tool-result/{thread_id}/{tool_call_id}/download",
+)
+async def download_tool_file(
+    thread_id: str,
+    tool_call_id: str,
+):
+    content_bytes, filename = await chat_service.download_tool_file(thread_id, tool_call_id)
+    return StreamingResponse(
+        io.BytesIO(content_bytes),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 @router.get(
     "/model"

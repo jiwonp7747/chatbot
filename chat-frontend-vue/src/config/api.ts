@@ -22,6 +22,7 @@ export const API_CONFIG = {
     resumeChat: '/chat/resume',
     toolSchemas: '/chat/tool-schemas',
     checkpointGraph: '/checkpoint/graph',
+    toolResult: '/chat/tool-result',
   }
 };
 
@@ -33,8 +34,12 @@ export const getSessionsUrl = (): string => {
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.sessions}`;
 };
 
-export const getMessagesUrl = (sessionId: string): string => {
-  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.messages}/${sessionId}`;
+export const getMessagesUrl = (sessionId: string, checkpointId?: string): string => {
+  const base = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.messages}/${sessionId}`;
+  if (checkpointId) {
+    return `${base}?checkpoint_id=${encodeURIComponent(checkpointId)}`;
+  }
+  return base;
 };
 
 export const getDeleteSessionUrl = (sessionId: string): string => {
@@ -65,7 +70,16 @@ export const getToolSchemasUrl = (): string => {
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.toolSchemas}`;
 };
 
-export const getCheckpointGraphUrl = (threadId: string, checkpointNs: string = ''): string => {
-  const params = new URLSearchParams({ thread_id: threadId, checkpoint_ns: checkpointNs });
+export const getCheckpointGraphUrl = (threadId: string, checkpointNs: string | null = null): string => {
+  const params = new URLSearchParams({ thread_id: threadId });
+  if (checkpointNs) params.set('checkpoint_ns', checkpointNs);
   return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.checkpointGraph}?${params.toString()}`;
+};
+
+export const getToolResultUrl = (threadId: string, toolCallId: string): string => {
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.toolResult}/${threadId}/${toolCallId}`;
+};
+
+export const getToolResultDownloadUrl = (threadId: string, toolCallId: string): string => {
+  return `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.toolResult}/${threadId}/${toolCallId}/download`;
 };

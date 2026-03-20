@@ -45,7 +45,10 @@ class LargeDataMiddleware(FilesystemMiddleware):
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
         result = await handler(request)
-        return self._process_tool_result(result, request)
+        processed = self._process_tool_result(result, request)
+        if isinstance(processed, ToolMessage):
+            logger.info(f"[LargeData] awrap_tool_call 리턴 시 response_metadata={processed.response_metadata}")
+        return processed
 
     def _process_tool_result(
         self, result: ToolMessage | Command, request: ToolCallRequest
@@ -56,7 +59,7 @@ class LargeDataMiddleware(FilesystemMiddleware):
 
         if isinstance(result, ToolMessage):
             artifact = result.artifact
-            additional_kwargs = dict(result.additional_kwargs) if result.additional_kwargs else {}
+            response_metadata = dict(result.response_metadata) if result.response_metadata else {}
 
             if artifact is not None:
                 artifact_str = str(artifact)
@@ -72,22 +75,24 @@ class LargeDataMiddleware(FilesystemMiddleware):
                     resolved.write(output_path, artifact_str)
                     logger.info(f"[LargeData] S3 저장 완료: tool={tool_name}, path={output_path}, size={artifact_size}bytes")
 
-                    additional_kwargs["data_ref_type"] = "file"
-                    additional_kwargs["file_path"] = output_path
-                    return result.model_copy(update={
+                    response_metadata["data_ref_type"] = "file"
+                    response_metadata["file_path"] = output_path
+                    updated = result.model_copy(update={
                         "artifact": None,
-                        "additional_kwargs": additional_kwargs,
+                        "response_metadata": response_metadata,
                         "content": (
                             f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 "
                             f"`{output_path}`에 저장했습니다. "
                             "해당 파일을 분석하여 작업을 계속하세요."
                         ),
                     })
+                    logger.info(f"[LargeData] model_copy 후 response_metadata={updated.response_metadata}")
+                    return updated
                 else:
                     logger.info(f"[LargeData] 인라인 유지: tool={tool_name}, size={artifact_size}bytes (threshold 미만)")
-                    additional_kwargs["data_ref_type"] = "artifact"
+                    response_metadata["data_ref_type"] = "artifact"
                     return result.model_copy(update={
-                        "additional_kwargs": additional_kwargs,
+                        "response_metadata": response_metadata,
                     })
             else:
                 content_str = str(result.content)
@@ -102,10 +107,10 @@ class LargeDataMiddleware(FilesystemMiddleware):
                     resolved.write(output_path, content_str)
                     logger.info(f"[LargeData] S3 저장 완료: tool={tool_name}, path={output_path}, size={content_size}bytes")
 
-                    additional_kwargs["data_ref_type"] = "file"
-                    additional_kwargs["file_path"] = output_path
+                    response_metadata["data_ref_type"] = "file"
+                    response_metadata["file_path"] = output_path
                     return result.model_copy(update={
-                        "additional_kwargs": additional_kwargs,
+                        "response_metadata": response_metadata,
                         "content": (
                             f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 "
                             f"`{output_path}`에 저장했습니다. "

@@ -82,8 +82,9 @@ async def get_chat_sessions(
 async def get_chat_messages(
         thread_id: str,
         db: AsyncSession,
+        checkpoint_id: Optional[str] = None,
 ):
-    """checkpoint에서 메시지를 추출하여 반환"""
+    """checkpoint에서 메시지를 추출하여 반환. checkpoint_id 지정 시 해당 시점의 메시지를 반환."""
     # 1. session 존재 확인
     session_query = select(ChatSession).where(
         ChatSession.thread_id == thread_id
@@ -103,6 +104,8 @@ async def get_chat_messages(
 
     try:
         config = {"configurable": {"thread_id": thread_id}}
+        if checkpoint_id:
+            config["configurable"]["checkpoint_id"] = checkpoint_id
         checkpoint_tuple = await checkpointer.aget_tuple(config)
         if not checkpoint_tuple:
             return []
@@ -115,6 +118,9 @@ async def get_chat_messages(
         from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
         result = []
         for idx, msg in enumerate(messages):
+            logger.info(f"[메시지 디버그] idx={idx}, type={type(msg).__name__}, is_ToolMessage={isinstance(msg, ToolMessage)}, is_dict={isinstance(msg, dict)}")
+            if isinstance(msg, dict):
+                logger.info(f"[메시지 디버그] dict 키: {list(msg.keys())}")
             if isinstance(msg, HumanMessage):
                 content = msg.content if isinstance(msg.content, str) else str(msg.content)
                 result.append({
@@ -142,7 +148,13 @@ async def get_chat_messages(
                     })
             elif isinstance(msg, ToolMessage):
                 content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                additional_kwargs = msg.additional_kwargs or {}
+                response_metadata = msg.response_metadata or {}
+                logger.info(
+                    f"[ToolMessage 읽기] name={getattr(msg, 'name', None)}, "
+                    f"tool_call_id={getattr(msg, 'tool_call_id', None)}, "
+                    f"response_metadata={response_metadata}, "
+                    f"additional_kwargs={msg.additional_kwargs}"
+                )
                 result.append({
                     "id": str(idx),
                     "role": "tool",
@@ -150,8 +162,101 @@ async def get_chat_messages(
                     "created_at": None,
                     "tool_name": getattr(msg, "name", None),
                     "tool_call_id": getattr(msg, "tool_call_id", None),
-                    "data_ref_type": additional_kwargs.get("data_ref_type"),
+                    "data_ref_type": response_metadata.get("data_ref_type"),
                 })
+
+        # 5. 서브에이전트 메시지 연결
+        # AIMessage의 tool_calls에서 subagent_type 매핑 수집
+        tool_call_subagent_map: dict[str, str] = {}  # tool_call_id → subagent_type
+        for msg in messages:
+            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls'):
+                for tc in msg.tool_calls:
+                    if tc.get("name") == "task":
+                        subagent_type = tc.get("args", {}).get("subagent_type")
+                        if subagent_type:
+                            tool_call_subagent_map[tc["id"]] = subagent_type
+
+        # 서브에이전트 메시지 조회 및 연결
+        if tool_call_subagent_map:
+            from db.checkpoint_models import CheckPoint
+            from db.database import AsyncSessionLocal
+
+            # checkpoint_ns별 lc_agent_name 조회
+            async with AsyncSessionLocal() as ns_db:
+                ns_query = (
+                    select(CheckPoint.checkpoint_ns, CheckPoint.metadata_)
+                    .where(
+                        CheckPoint.thread_id == thread_id,
+                        CheckPoint.checkpoint_ns != "",
+                    )
+                    .distinct(CheckPoint.checkpoint_ns)
+                )
+                ns_result = await ns_db.execute(ns_query)
+                ns_rows = ns_result.all()
+
+            # agent_name → checkpoint_ns 맵
+            agent_ns_map: dict[str, str] = {}
+            for row in ns_rows:
+                meta = row.metadata_ or {}
+                agent_name = meta.get("lc_agent_name")
+                if agent_name:
+                    agent_ns_map[agent_name] = row.checkpoint_ns
+
+            # ToolMessage(name="task")에 서브에이전트 메시지 연결
+            for item in result:
+                if item.get("role") == "tool" and item.get("tool_name") == "task":
+                    tc_id = item.get("tool_call_id")
+                    subagent_type = tool_call_subagent_map.get(tc_id)
+                    if subagent_type and subagent_type in agent_ns_map:
+                        cp_ns = agent_ns_map[subagent_type]
+                        try:
+                            # 서브그래프의 head checkpoint에서 메시지 추출
+                            sub_config = {"configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": cp_ns,
+                            }}
+                            sub_tuple = await checkpointer.aget_tuple(sub_config)
+                            if sub_tuple:
+                                sub_channel = sub_tuple.checkpoint.get("channel_values", {})
+                                sub_msgs = sub_channel.get("messages", [])
+                                sub_result = []
+                                for si, sm in enumerate(sub_msgs):
+                                    if isinstance(sm, HumanMessage):
+                                        sub_content = sm.content if isinstance(sm.content, str) else str(sm.content)
+                                        sub_result.append({
+                                            "id": f"sub-{si}",
+                                            "role": "user",
+                                            "content": sub_content,
+                                        })
+                                    elif isinstance(sm, AIMessage) and sm.content:
+                                        sub_content = sm.content if isinstance(sm.content, str) else ""
+                                        if isinstance(sm.content, list):
+                                            parts = []
+                                            for part in sm.content:
+                                                if isinstance(part, str):
+                                                    parts.append(part)
+                                                elif isinstance(part, dict) and part.get("type") == "text":
+                                                    parts.append(part.get("text", ""))
+                                            sub_content = "".join(parts)
+                                        if sub_content:
+                                            sub_result.append({
+                                                "id": f"sub-{si}",
+                                                "role": "assistant",
+                                                "content": sub_content,
+                                            })
+                                    elif isinstance(sm, ToolMessage):
+                                        sub_content = sm.content if isinstance(sm.content, str) else str(sm.content)
+                                        sub_result.append({
+                                            "id": f"sub-{si}",
+                                            "role": "tool",
+                                            "content": sub_content[:200],  # 서브에이전트 도구 결과는 축약
+                                            "tool_name": getattr(sm, "name", None),
+                                        })
+                                item["agent_name"] = subagent_type
+                                item["sub_messages"] = sub_result
+                                logger.info(f"✅ 서브에이전트 메시지 {len(sub_result)}개 연결: agent={subagent_type}")
+                        except Exception as e:
+                            logger.warning(f"서브에이전트 메시지 조회 실패: agent={subagent_type}, error={e}")
 
         logger.info(f"✅ checkpoint에서 메시지 {len(result)}개 추출: thread={thread_id}")
         return result
@@ -191,8 +296,8 @@ async def get_tool_result(
     if not target_msg:
         raise ApiException(FailureCode.NOT_FOUND_DATA, f"tool_call_id={tool_call_id}에 해당하는 ToolMessage를 찾을 수 없습니다")
 
-    additional_kwargs = target_msg.additional_kwargs or {}
-    data_ref_type = additional_kwargs.get("data_ref_type")
+    response_metadata = target_msg.response_metadata or {}
+    data_ref_type = response_metadata.get("data_ref_type")
 
     if data_ref_type == "artifact":
         # 체크포인트에 저장된 artifact 반환
@@ -202,33 +307,75 @@ async def get_tool_result(
             "data_ref_type": "artifact",
             "data": target_msg.artifact,
         }
-    elif data_ref_type == "file":
-        # FileBackend에서 읽기
-        file_path = additional_kwargs.get("file_path")
-        if not file_path:
-            raise ApiException(FailureCode.NOT_FOUND_DATA, "파일 경로가 없습니다")
-
-        from ai.backend import get_s3_backend
-        backend = get_s3_backend()
-        file_content = await backend.aread(file_path, offset=0, limit=100000)
-
-        if file_content.startswith("Error: file not found"):
-            raise ApiException(FailureCode.NOT_FOUND_DATA, f"파일을 찾을 수 없습니다: {file_path}")
-
-        return {
-            "tool_call_id": tool_call_id,
-            "tool_name": getattr(target_msg, "name", None),
-            "data_ref_type": "file",
-            "data": file_content,
-        }
     else:
-        # data_ref_type이 없는 경우, content 자체를 반환
+        # data_ref_type이 없거나 file인 경우, content 자체를 반환
         return {
             "tool_call_id": tool_call_id,
             "tool_name": getattr(target_msg, "name", None),
-            "data_ref_type": None,
+            "data_ref_type": data_ref_type,
             "data": target_msg.content,
         }
+
+
+async def download_tool_file(
+        thread_id: str,
+        tool_call_id: str,
+):
+    """ToolMessage에 연결된 파일을 S3에서 읽어 (bytes, filename) 튜플 반환"""
+    from ai.checkpointer import get_checkpointer
+    from langchain_core.messages import ToolMessage
+
+    checkpointer = get_checkpointer()
+    if not checkpointer:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, "checkpointer가 초기화되지 않음")
+
+    config = {"configurable": {"thread_id": thread_id}}
+    checkpoint_tuple = await checkpointer.aget_tuple(config)
+    if not checkpoint_tuple:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, "체크포인트를 찾을 수 없습니다")
+
+    channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
+    messages = channel_values.get("messages", [])
+
+    target_msg = None
+    for msg in messages:
+        if isinstance(msg, ToolMessage) and getattr(msg, "tool_call_id", None) == tool_call_id:
+            target_msg = msg
+            break
+
+    if not target_msg:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, f"tool_call_id={tool_call_id}에 해당하는 ToolMessage를 찾을 수 없습니다")
+
+    response_metadata = target_msg.response_metadata or {}
+    data_ref_type = response_metadata.get("data_ref_type")
+
+    if data_ref_type != "file":
+        raise ApiException(FailureCode.BAD_REQUEST, "이 ToolMessage는 파일 타입이 아닙니다")
+
+    file_path = response_metadata.get("file_path")
+    if not file_path:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, "파일 경로가 없습니다")
+
+    from ai.backend import get_s3_backend
+    import json
+
+    backend = get_s3_backend()
+
+    # S3에서 raw JSON 데이터 읽기
+    file_data = await backend._get_file_data(file_path)
+    if not file_data:
+        raise ApiException(FailureCode.NOT_FOUND_DATA, f"파일을 찾을 수 없습니다: {file_path}")
+
+    # content는 라인 배열 → 줄바꿈으로 합쳐서 bytes 변환
+    content_lines = file_data.get("content", [])
+    content_str = "\n".join(content_lines)
+    content_bytes = content_str.encode("utf-8")
+
+    # 파일명 추출 (경로의 마지막 부분)
+    import os as _os
+    filename = _os.path.basename(file_path)
+
+    return content_bytes, filename
 
 
 async def get_available_model_list(
