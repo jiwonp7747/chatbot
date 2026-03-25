@@ -1,8 +1,8 @@
 """대용량 도구 결과 파일 저장 미들웨어
 
-도구 실행 결과가 threshold를 초과하면 가상 파일시스템에 저장하고,
+도구 실행 결과가 threshold를 초과하면 S3에 저장하고,
 에이전트에게 파일 경로를 알려줍니다.
-FilesystemMiddleware를 상속하여 read_file/grep 등 파일 도구를 자동 제공합니다.
+read_file 도구는 제공하지 않습니다 (무한 루프 방지).
 """
 import logging
 from typing import override, Callable, Awaitable
@@ -12,7 +12,6 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
 from deepagents.middleware.filesystem import FilesystemMiddleware
-from deepagents.middleware._utils import append_to_system_message
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,7 @@ class LargeDataMiddleware(FilesystemMiddleware):
                         "content": (
                             f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 "
                             f"`{output_path}`에 저장했습니다. "
-                            "해당 파일을 분석하여 작업을 계속하세요."
+                            "저장된 데이터를 기반으로 작업을 계속하세요."
                         ),
                     })
                     logger.info(f"[LargeData] model_copy 후 response_metadata={updated.response_metadata}")
@@ -114,7 +113,7 @@ class LargeDataMiddleware(FilesystemMiddleware):
                         "content": (
                             f"`{tool_name}` 도구의 실행 결과가 너무 크기 때문에 "
                             f"`{output_path}`에 저장했습니다. "
-                            "해당 파일을 분석하여 작업을 계속하세요."
+                            "저장된 데이터를 기반으로 작업을 계속하세요."
                         ),
                     })
 
@@ -122,14 +121,9 @@ class LargeDataMiddleware(FilesystemMiddleware):
 
     @override
     def wrap_model_call(self, request, handler):
-        large_data_prompt = (
-            "도구 실행 결과가 파일에 저장됐다는 메시지를 받으면, "
-            "반드시 read_file 또는 grep으로 해당 파일을 분석하여 "
-            "작업을 완료하세요. 파일 경로는 메시지에 포함되어 있습니다."
-        )
-        new_system = append_to_system_message(request.system_message, large_data_prompt)
-        request = request.override(system_message=new_system)
-        return super().wrap_model_call(request, handler)
+        # FilesystemMiddleware.wrap_model_call을 건너뛰어 read_file/grep 도구 프롬프트 비활성화
+        # (read_file 호출 → 파일 생성 → read_file 호출 무한 루프 방지)
+        return handler(request)
 
 
 def create_large_data_middleware(backend, threshold: int = 10000) -> LargeDataMiddleware:
