@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: chat-backend-spring
+
+  datasource:
+    url: jdbc:oracle:thin:@${DB_HOST:localhost}:${DB_PORT:1521}/${DB_SERVICE:XEPDB1}
+    username: ${DB_USERNAME:chat_app}
+    password: ${DB_PASSWORD:chat_app}
+    driver-class-name: oracle.jdbc.OracleDriver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.OracleDialect
+        format_sql: true
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:disabled}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4o-mini}
+
+# JWT
+token:
+  secret:
+    key: ${JWT_SECRET_KEY:chatbot-spring-ai-secret-key-must-be-at-least-256-bits-long}
+  access-token:
+    plus-hour: ${JWT_ACCESS_HOUR:6}
+  refresh-token:
+    plus-hour: ${JWT_REFRESH_HOUR:72}
+
+server:
+  port: ${SERVER_PORT:8080}
