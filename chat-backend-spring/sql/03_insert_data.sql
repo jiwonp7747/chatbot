@@ -1,7 +1,9 @@
 -- ============================================
--- 초기 데이터 삽입 (chat_app 스키마)
--- chat_app 계정으로 접속하여 실행
+-- 초기 데이터 삽입 (bistelligence 스키마)
+-- container-entrypoint-initdb.d 에서 SYSTEM으로 실행됨
 -- ============================================
+
+ALTER SESSION SET CURRENT_SCHEMA = bistelligence;
 
 -- 사용자 (id: bistelligence, password: admin)
 INSERT INTO "user" (user_id, password, name, status, created_at, updated_at)

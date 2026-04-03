@@ -1,7 +1,9 @@
 -- ============================================
--- 테이블 생성 (chat_app 스키마)
--- chat_app 계정으로 접속하여 실행
+-- 테이블 생성 (bistelligence 스키마)
+-- container-entrypoint-initdb.d 에서 SYSTEM으로 실행됨
 -- ============================================
+
+ALTER SESSION SET CURRENT_SCHEMA = bistelligence;
 
 -- 1. 사용자 테이블
 CREATE TABLE "user" (

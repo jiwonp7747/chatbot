@@ -8,4 +8,5 @@ import lombok.Data;
 public class ChatResponse {
 
     private String answer;
+    private String threadId;
 }

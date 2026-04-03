@@ -3,9 +3,9 @@ spring:
     name: chat-backend-spring
 
   datasource:
-    url: jdbc:oracle:thin:@${DB_HOST:localhost}:${DB_PORT:1521}/${DB_SERVICE:XEPDB1}
-    username: ${DB_USERNAME:chat_app}
-    password: ${DB_PASSWORD:chat_app}
+    url: jdbc:oracle:thin:@${DB_HOST:localhost}:${DB_PORT:1522}/${DB_SERVICE:XEPDB1}
+    username: ${DB_USERNAME:bistelligence}
+    password: ${DB_PASSWORD:admin}
     driver-class-name: oracle.jdbc.OracleDriver
 
   jpa:
@@ -18,11 +18,21 @@ spring:
         format_sql: true
 
   ai:
+    chat:
+      client:
+        enabled: false # 사용하는 ChatModel이 여러개인 경우 ChatClient 생성 비활성화
     openai:
       api-key: ${OPENAI_API_KEY:disabled}
       chat:
         options:
           model: ${OPENAI_MODEL:gpt-4o-mini}
+    vertex-ai:
+      gemini:
+        project-id: ${VERTEX_AI_PROJECT_ID:your-gcp-project-id}
+        location: ${VERTEX_AI_LOCATION:us-central1}
+        chat:
+          options:
+            model: ${GEMINI_MODEL:gemini-2.0-flash}
 
 # JWT
 token:
@@ -32,6 +42,11 @@ token:
     plus-hour: ${JWT_ACCESS_HOUR:6}
   refresh-token:
     plus-hour: ${JWT_REFRESH_HOUR:72}
+
+# Fab Trace API
+fabtrace:
+  api:
+    url: ${FAB_TRACE_API_URL:http://localhost:9090}
 
 server:
   port: ${SERVER_PORT:8080}

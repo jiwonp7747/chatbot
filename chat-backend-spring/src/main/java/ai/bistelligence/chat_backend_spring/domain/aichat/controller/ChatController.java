@@ -6,6 +6,7 @@ import ai.bistelligence.chat_backend_spring.domain.aichat.dto.ChatResponse;
 import ai.bistelligence.chat_backend_spring.domain.aichat.service.ChatService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +21,10 @@ public class ChatController {
 
     @PostMapping
     public Api<ChatResponse> chat(@Valid @RequestBody ChatRequest request) {
-        String answer = chatService.chat(request.getMessage());
-        return Api.OK(new ChatResponse(answer));
+        String threadId = StringUtils.hasText(request.getThreadId())
+                ? request.getThreadId()
+                : java.util.UUID.randomUUID().toString();
+        String answer = chatService.chat(request.getMessage(), threadId);
+        return Api.OK(new ChatResponse(answer, threadId));
     }
 }

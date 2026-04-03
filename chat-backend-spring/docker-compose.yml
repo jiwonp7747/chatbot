@@ -1,0 +1,20 @@
+services:
+  oracle-db:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: chat-oracle-xe
+    ports:
+      - "1522:1521"
+    environment:
+      ORACLE_PASSWORD: admin
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./sql:/container-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  oracle-data:
